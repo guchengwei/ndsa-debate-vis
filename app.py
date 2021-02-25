@@ -154,17 +154,16 @@ page1_layout = html.Div(
         html.Div(
             [
                 html.H6(
-                        'Argument Relation Graph displays the relation between arguments on the chosen claim',
-                        ),
+                    'Argument Relation Graph displays the relation between arguments on the chosen claim',
+                ),
 
-                dcc.Graph(id="main-graph"),
                 dcc.Loading(
-                 id="loading",
-                 type="default",
-                 fullscreen=True,
-                 children=html.Div(id="loading-output")
-             ),
-             ],
+                    id="loading",
+                    type="default",
+                    fullscreen=True,
+                    children=[html.Div(dcc.Graph(id="main-graph"))]
+                ),
+            ],
             id="right column",
             className="pretty_container twelve columns",
         ),
@@ -172,11 +171,17 @@ page1_layout = html.Div(
         html.Div(
             [
                 html.H6(
-                            'Dialogical Explanation is a simulation of a debate over the chosen claim '
-                            '-- choose an argument in the graph above to start'
-                        ),
+                    'Dialogical Explanation is a simulation of a debate over the chosen claim '
+                    '-- choose an argument in the graph above to start'
+                ),
 
-                dcc.Graph(id="dialogical"),
+                dcc.Loading(
+                    id="loading2",
+                    type="circle",
+                    fullscreen=True,
+                    children=[html.Div(dcc.Graph(id="dialogical"))]
+                ),
+
             ],
             className="pretty_container twelve columns",
         ),
@@ -239,8 +244,7 @@ app.clientside_callback(
 
 
 @app.callback([dash.dependencies.Output('main-graph', 'figure'),
-               dash.dependencies.Output('extension', 'children'),
-               dash.dependencies.Output('loading-output', 'children')
+               dash.dependencies.Output('extension', 'children')
                ],
               [dash.dependencies.Input('candidate-dropdown', 'value')])
 def main_work(claim):
@@ -293,7 +297,7 @@ def main_work(claim):
 
     figure = argument_graph(extension, table_data, separated_form=separated_set_of_premises)
 
-    return figure, dumped, True
+    return figure, dumped
 
 
 @app.callback([dash.dependencies.Output('dialogical', 'figure'),
@@ -720,26 +724,26 @@ def dialogical_graph(extension, arg_number):
     #             range=[min(Xn) * 1.2, max(Xn) * 1.2]
     #             )
     fig.update_layout(
-                      autosize=True,
-                      # legend=dict(font=dict(size=10), orientation="h"),
-                      showlegend=False,
-                      xaxis=dict(showline=True,
-                                 zeroline=True,
-                                 showgrid=True,
-                                 showticklabels=False,
-                                 range=[min(Xn) * 1.2, max(Xn) * 1.2]
-                                 ),
-                      yaxis=dict(showline=True,
-                                 zeroline=True,
-                                 showgrid=True,
-                                 showticklabels=False
-                                 ),
-                      margin=dict(l=20, r=20, b=20, t=40),
-                      hovermode='closest',
-                      plot_bgcolor="#F9F9F9",
-                      paper_bgcolor="#F9F9F9",
+        autosize=True,
+        # legend=dict(font=dict(size=10), orientation="h"),
+        showlegend=False,
+        xaxis=dict(showline=True,
+                   zeroline=True,
+                   showgrid=True,
+                   showticklabels=False,
+                   range=[min(Xn) * 1.2, max(Xn) * 1.2]
+                   ),
+        yaxis=dict(showline=True,
+                   zeroline=True,
+                   showgrid=True,
+                   showticklabels=False
+                   ),
+        margin=dict(l=20, r=20, b=20, t=40),
+        hovermode='closest',
+        plot_bgcolor="#F9F9F9",
+        paper_bgcolor="#F9F9F9",
 
-                      )
+    )
 
     for key in root_dict:
         tree_text = root_dict[key]
