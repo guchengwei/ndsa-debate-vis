@@ -129,10 +129,10 @@ page1_layout = html.Div(
             [
                 html.Div(
                     [
-                        html.P(
-                            "Choose a claim",
-                            className="control_label",
-                        ),
+                        dcc.Markdown('''
+                        **Choose a claim** to draw the corresponding argument relation graph
+                        '''),
+
                         dcc.Dropdown(
                             id="candidate-dropdown",
                             placeholder='Select a claim',
@@ -151,12 +151,17 @@ page1_layout = html.Div(
             className="row flex-display",
         ),
 
+        html.Div([
+
+            dcc.Markdown(
+                '''###### **Argument Relation Graph** displays the relation between arguments related to the chosen claim ''')
+
+        ], className="pretty_container seven columns"
+        ),
+
         html.Div(
             [
-                html.H6(
-                    'Argument Relation Graph displays the relation between arguments on the chosen claim',
-                ),
-
+                html.Button('Redraw', id='redraw', n_clicks=0),
                 dcc.Loading(
                     id="loading",
                     type="default",
@@ -164,16 +169,21 @@ page1_layout = html.Div(
                     children=[html.Div(dcc.Graph(id="main-graph"))]
                 ),
             ],
-            id="right column",
+
             className="pretty_container twelve columns",
+        ),
+
+        html.Div([
+
+            dcc.Markdown('''
+            ###### **Dialogical Explanation** is a simulation of a debate over the chosen claim &nbsp;&nbsp; >click an argument in the graph above to start<
+                        ''')
+
+        ], className="pretty_container nine columns"
         ),
 
         html.Div(
             [
-                html.H6(
-                    'Dialogical Explanation is a simulation of a debate over the chosen claim '
-                    '-- choose an argument in the graph above to start'
-                ),
 
                 dcc.Loading(
                     id="loading2",
@@ -190,9 +200,9 @@ page1_layout = html.Div(
             [
                 html.Div(
                     [
-                        html.P(
-                            "Select a set of premises to see a derivation inside of the chosen argument"
-                        ),
+                        dcc.Markdown('''
+                        **Select a set of premises** to see a derivation inside of the chosen argument
+                        '''),
 
                         dcc.Dropdown(
                             id="premises-dropdown",
@@ -219,13 +229,14 @@ page1_layout = html.Div(
 
                 html.Div(
                     [
-                        html.H6(
-                            "Natural Language Explanation gives a proof about the chosen argument",
-                            className="control_label",
-                        ),
-                        html.Hr(),
+                        html.Div([
+                            dcc.Markdown('''
+                            ###### **Natural Language Explanation** gives a proof about the chosen argument
+                            ''')
+                        ], className="pretty_container twelve columns"),
 
-                        html.Div(id='NLP')],
+                        html.Div(id='NLP', className="pretty_container twelve columns")],
+
                     className="pretty_container six columns"
                 )
             ],
@@ -246,10 +257,18 @@ app.clientside_callback(
 @app.callback([dash.dependencies.Output('main-graph', 'figure'),
                dash.dependencies.Output('extension', 'children')
                ],
-              [dash.dependencies.Input('candidate-dropdown', 'value')])
-def main_work(claim):
+              [dash.dependencies.Input('candidate-dropdown', 'value'),
+               dash.dependencies.Input('redraw', 'n_clicks')
+               ])
+def main_work(claim, n_clicks):
     if not claim:
         raise dash.exceptions.PreventUpdate
+
+    changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
+    if 'redraw' in changed_id:
+        redraw = True
+    else:
+        redraw = False
 
     try:
         with open('data/cache_ext.txt') as cache_file:
@@ -282,20 +301,7 @@ def main_work(claim):
 
     dumped = json.dumps(str(extension.__dict__.copy()))
 
-    table_data = []
-
-    for arg in extension.arguments:
-        row = dict()
-
-        row['arg'] = 'A' + str(arg)
-        adm = str([item for item in extension.admissible if arg in item]).strip('[]')
-        row['adm'] = adm if adm != '' else 'None'
-        row['gro'] = str(extension.grounded) if arg in extension.grounded else 'None'
-        row['ide'] = str(extension.ideal) if arg in extension.ideal else 'None'
-
-        table_data.append(row)
-
-    figure = argument_graph(extension, table_data, separated_form=separated_set_of_premises)
+    figure = argument_graph(extension, separated_form=separated_set_of_premises, redraw=redraw)
 
     return figure, dumped
 
@@ -354,7 +360,7 @@ def after_click(dumped_extension, argument):
         premise_text = premise_text.replace('<br>', '\n')
         premise_text = premise_text  # remove \n at the end of string
 
-        set_info = 'Set' + str(set_number) + ': ' + str(set_length)
+        set_info = 'Set number ' + str(set_number) + ', containing ' + str(set_length)
         if set_length > 1:
             set_info += ' premises'
         else:
@@ -717,6 +723,19 @@ def dialogical_graph(extension, arg_number):
                              hoverinfo='text',
                              ))
 
+    fig.update_layout(annotations=[dict(showarrow=True, arrowhead=2, arrowcolor='#DC2808',
+                                        arrowsize=2, arrowwidth=1, opacity=0.5,
+                                        ax=(position[E[1]][0] * 9 +
+                                            position[E[0]][0]) / 10,
+                                        ay=(-position[E[1]][1] * 9 +
+                                            -position[E[0]][1]) / 10,
+                                        axref='x', ayref='y',
+                                        x=(position[E[0]][0] * 9 +
+                                           position[E[1]][0]) / 10,
+                                        y=(-position[E[0]][1] * 9 +
+                                           -position[E[1]][1]) / 10,
+                                        xref='x', yref='y') for E in edges])
+
     # axis = dict(showline=True,  # hide axis line, grid, ticklabels and  title
     #             zeroline=True,
     #             showgrid=True,
@@ -724,6 +743,7 @@ def dialogical_graph(extension, arg_number):
     #             range=[min(Xn) * 1.2, max(Xn) * 1.2]
     #             )
     fig.update_layout(
+        title='hover to see detail',
         autosize=True,
         # legend=dict(font=dict(size=10), orientation="h"),
         showlegend=False,
@@ -749,23 +769,23 @@ def dialogical_graph(extension, arg_number):
         tree_text = root_dict[key]
 
         if tree_text == 'not a dispute tree':
-            tree_text = f'Argument A{arg_number} is <b>not accepted</b> because<br>' \
+            tree_text = f'Clicked argument A{arg_number} is <b>not accepted</b> because<br>' \
                         f'proponent cannot defend itself against opponent.'
         elif tree_text == 'not admissible':
-            tree_text = f'Argument A{arg_number} is <b>not accepted</b> because<br> ' \
+            tree_text = f'Clicked argument A{arg_number} is <b>not accepted</b> because<br> ' \
                         f'an argument is used by both proponent and opponent.'
         elif tree_text == 'admissible':
-            tree_text = f'Argument A{arg_number} is <b>admissible</b> because<br>' \
+            tree_text = f'Clicked argument A{arg_number} is <b>admissible</b> because<br>' \
                         f'proponent can defend itself against opponent.'
         elif tree_text == 'grounded':
-            tree_text = f'Argument A{arg_number} is <b>grounded</b> because<br>' \
+            tree_text = f'Clicked argument A{arg_number} is <b>grounded</b> because<br>' \
                         f'the debate won\'t last forever.'
         elif tree_text == 'ideal':
-            tree_text = f'Argument A{arg_number} is <b>ideal</b> because<br>' \
+            tree_text = f'Clicked argument A{arg_number} is <b>ideal</b> because<br>' \
                         f'either no opponent can counterattack proponent or <br>' \
                         f'no argument used by opponent is admissible.'
         elif tree_text == 'grounded,ideal':
-            tree_text = f'Argument A{arg_number} is <b>grounded</b> and <b>ideal</b> because<br>' \
+            tree_text = f'Clicked argument A{arg_number} is <b>grounded</b> and <b>ideal</b> because<br>' \
                         f'(1) the debate won\'t last forever;<br>' \
                         f'(2) either no opponent can counterattack proponent or<br>' \
                         f'no argument used by opponent is admissible.'
@@ -783,7 +803,7 @@ def dialogical_graph(extension, arg_number):
     return fig
 
 
-def argument_graph(extension, table_data, separated_form=None):
+def argument_graph(extension, separated_form=None, redraw=False):
     G = nx.DiGraph()
     for index in extension.arguments:
         raw_premise, conclusion = re.findall(r'\{(.+)\}\|-(.+)', extension.original_arg[index])[0]
@@ -793,8 +813,10 @@ def argument_graph(extension, table_data, separated_form=None):
         for another_index in extension.attackee[index]:
             G.add_edge(index, another_index)
 
-    # pos = nx.spring_layout(G, k=1)
-    pos = nx.kamada_kawai_layout(G)
+    if redraw:
+        pos = nx.spring_layout(G, k=1)
+    else:
+        pos = nx.kamada_kawai_layout(G)
 
     max_x = max(pos[key][0] for key in pos)
     min_x = min(pos[key][0] for key in pos)
@@ -819,31 +841,36 @@ def argument_graph(extension, table_data, separated_form=None):
                                     hoverlabel=dict(bgcolor='white', font_size=16),
                                     hoverinfo='text', marker=dict(size=20), opacity=0))
 
-    figure.update_layout(autosize=True,
-                         hovermode='closest',
-                         margin=dict(b=20, l=20, r=20, t=60),
-                         xaxis=dict(showgrid=True, zeroline=True, showticklabels=False,
-                                    range=[min_x * 1.5, max_x * 1.5]),
-                         yaxis=dict(showgrid=True, zeroline=True, showticklabels=False,
-                                    range=[min_y * 1.5, max_y * 1.5]),
-                         height=600,
-                         clickmode='event',
-                         plot_bgcolor="#F9F9F9",
-                         paper_bgcolor="#F9F9F9",
-                         annotations=[dict(showarrow=True, arrowhead=2, arrowcolor='#6495ED',
-                                           arrowsize=2, arrowwidth=1, opacity=0.5,
-                                           ax=(G.nodes[edge[0]]['pos'][0] * 3 +
-                                               G.nodes[edge[1]]['pos'][0]) / 4,
-                                           ay=(G.nodes[edge[0]]['pos'][1] * 3 +
-                                               G.nodes[edge[1]]['pos'][1]) / 4,
-                                           axref='x', ayref='y',
-                                           x=(G.nodes[edge[1]]['pos'][0] * 3 +
-                                              G.nodes[edge[0]]['pos'][0]) / 4,
-                                           y=(G.nodes[edge[1]]['pos'][1] * 3 +
-                                              G.nodes[edge[0]]['pos'][1]) / 4,
-                                           xref='x', yref='y') for edge in G.edges])
-
-    already_shown = {'ide+gro': False, 'ide': False, 'gro': False, 'adm': False, 'not adm': False}
+    figure.update_layout(
+        title={
+            'text': "Hover to see detail",
+            'y': 1.0,
+            'x': 0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'},
+        autosize=True,
+        hovermode='closest',
+        margin=dict(b=20, l=20, r=20, t=60),
+        xaxis=dict(showgrid=True, zeroline=True, showticklabels=False,
+                   range=[min_x * 1.3, max_x * 1.3]),
+        yaxis=dict(showgrid=True, zeroline=True, showticklabels=False,
+                   range=[min_y * 1.3, max_y * 1.3]),
+        height=600,
+        clickmode='event',
+        plot_bgcolor="#F9F9F9",
+        paper_bgcolor="#F9F9F9",
+        annotations=[dict(showarrow=True, arrowhead=2, arrowcolor='#6495ED',
+                          arrowsize=2, arrowwidth=1, opacity=0.5,
+                          ax=(G.nodes[edge[0]]['pos'][0] * 3 +
+                              G.nodes[edge[1]]['pos'][0]) / 4,
+                          ay=(G.nodes[edge[0]]['pos'][1] * 3 +
+                              G.nodes[edge[1]]['pos'][1]) / 4,
+                          axref='x', ayref='y',
+                          x=(G.nodes[edge[1]]['pos'][0] * 3 +
+                             G.nodes[edge[0]]['pos'][0]) / 4,
+                          y=(G.nodes[edge[1]]['pos'][1] * 3 +
+                             G.nodes[edge[0]]['pos'][1]) / 4,
+                          xref='x', yref='y') for edge in G.edges])
 
     for node in G.nodes:
         x, y = G.nodes[node]['pos']
@@ -855,10 +882,10 @@ def argument_graph(extension, table_data, separated_form=None):
 
         if len(claim_text) >= 40:  # max length of a annotate text is 40
 
-            text = claim_text[:38] + '...' if str(node) != '0' else claim_text[0:38] + '...' + '<br>' + '-' * 40
+            text = claim_text[:38] + '...'
 
         else:
-            text = claim_text if str(node) != '0' else claim_text + '<br>' + '-' * len(claim_text)
+            text = claim_text
 
         if text.startswith('<b>'):
             text = text[:3] + text[3].capitalize() + text[4:]
@@ -873,39 +900,18 @@ def argument_graph(extension, table_data, separated_form=None):
 
         size = int(17 + 5 * len(extension.attackee[node]) / len(extension.arguments))  # follow Out-Degrees
 
-        if table_data[node]['ide'] != 'None' and table_data[node]['gro'] != 'None':
-            legendgroup = 'ide+gro'
-            name = 'Ideal and Grounded'
-            color = "#FA9FB5"  # follow extension type
-        elif table_data[node]['ide'] != 'None':
-            legendgroup = 'ide'
-            name = 'Ideal'
-            color = "#fac1b7"
-        elif table_data[node]['gro'] != 'None':
-            legendgroup = 'gro'
-            name = 'Grounded'
-            color = "#FFEDA0"
-        elif table_data[node]['adm'] != 'None':
-            legendgroup = 'adm'
-            name = 'Admissible'
-            color = "#3C3C3C"
+        if str(node) == '0':
+            color = '#FBB234'
         else:
-            legendgroup = 'not adm'
-            name = 'Not Admissible'
-            color = "#BFD3E6"
-
-        if already_shown[legendgroup]:
-            show = False
-        else:
-            show = True
-            already_shown[legendgroup] = True
+            color = '#78CD3F'
 
         figure.add_trace(
             go.Scatter(x=tuple([x]), y=tuple([y]), text=tuple([text]), hovertext=tuple([hovertext]),
                        hovertemplate=tuple([hovertemplate]),
                        hoverinfo='text', mode='text', textposition='middle center',
                        hoverlabel=dict(bgcolor=color, font_size=16),
-                       legendgroup=legendgroup, name=name, showlegend=show,
+                       name='A' + str(node),
+                       showlegend=False,
                        textfont=dict(size=size, color=color)
                        ))
 
