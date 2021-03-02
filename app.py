@@ -475,7 +475,7 @@ def natural_language_transform(proof):
                     nlp += '__We have__ ' + clause + ', __given that__ ' + prop_list[int(number[0])] + '.\n\n'
                 else:
                     nlp += '__We have__ ' + clause + ', __given that__ '
-                    nlp += ' and '.join([prop_list[int(item)] for item in number])
+                    nlp += ' __and__ '.join([prop_list[int(item)] for item in number])
                     nlp += '.\n\n'
 
         else:
