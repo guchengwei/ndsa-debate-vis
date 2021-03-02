@@ -317,7 +317,8 @@ class Extensions:
         end_message = self.end_message(tree.root)
         if end_message.find('proponent cannot defend itself.') != -1:
             tree.type = 'not a dispute tree'
-        elif end_message.find('an argument is used by both proponent and opponent.') != -1:
+        elif end_message.find('an argument is used by both proponent and opponent,'
+                              '<br> resulting in self-attack.') != -1:
             tree.type = 'not admissible'
         else:
             if end_message.find('proponent can use an argument more than once,'

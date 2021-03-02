@@ -643,7 +643,6 @@ def natural_language_transform(proof):
 
 def dialogical_graph(extension, arg_number):
     edges, vertices, node_dict, arg_dict, root_dict = extension.dialogical_explanations(arg_number)
-
     g = igraph.Graph()
     g.add_vertices(vertices)
     g.add_edges(edges)
@@ -742,6 +741,7 @@ def dialogical_graph(extension, arg_number):
     #             showticklabels=True,
     #             range=[min(Xn) * 1.2, max(Xn) * 1.2]
     #             )
+
     fig.update_layout(
         title='hover to see detail',
         autosize=True,
