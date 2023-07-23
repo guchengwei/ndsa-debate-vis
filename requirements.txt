@@ -1,8 +1,8 @@
 appnope==0.1.2
 backcall==0.2.0
 Brotli==1.0.9
-click==7.1.2
-dash==1.19.0
+click
+dash
 dash-core-components==1.15.0
 dash-html-components==1.1.2
 dash-renderer==1.9.0
@@ -15,10 +15,10 @@ gunicorn==20.0.4
 html-testRunner==1.2.1
 ipython==7.20.0
 ipython-genutils==0.2.0
-itsdangerous==1.1.0
+itsdangerous
 jedi==0.18.0
-Jinja2==2.11.3
-MarkupSafe==1.1.1
+Jinja2
+MarkupSafe
 networkx==2.5
 numpy==1.20.1
 pandas==1.2.2
@@ -38,4 +38,4 @@ six==1.15.0
 texttable==1.6.3
 traitlets==5.0.5
 wcwidth==0.2.5
-Werkzeug==1.0.1
+Werkzeug

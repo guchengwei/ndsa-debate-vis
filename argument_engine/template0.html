@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="">
+<html lang="en">
 <head>
     <title>{{ title }}</title>
     <meta charset="utf-8">
@@ -55,7 +55,7 @@
                         {%- if (test_case.stdout or test_case.err or test_case.err) and test_case.outcome != test_case.SKIP %}
                         <tr style="display:none;">
                             <td class="col-xs-9" colspan="3">
-                                {%- if test_case.stdout %}<p style="white-space: pre;'Lucida Console', Monaco, monospace;">{{ test_case.stdout }}</p>{% endif %}
+                                {%- if test_case.stdout %}<p style="white-space: pre; font-family:'Lucida Console', Monaco, monospace;">{{ test_case.stdout }}</p>{% endif %}
                                 {%- if test_case.err %}<p style="color:maroon;">{{ test_case.err[0].__name__ }}: {{ test_case.err[1] }}</p>{% endif %}
                                 {%- if test_case.err %}<p style="color:maroon;">{{ test_case.test_exception_info }}</p>{% endif %}
                             </td>
