@@ -1,7 +1,7 @@
 import dash
-import dash_table
-import dash_core_components as dcc
-import dash_html_components as html
+from dash import dash_table
+from dash import dcc
+from dash import html
 
 import ast
 import json
@@ -106,16 +106,16 @@ page1_layout = html.Div(
                 html.Div(
                     [
                         html.H1("NDSA Debate Visualization"),
+                        dcc.Link('Go to knowledge-base', href='/use-case'),
                     ],
                     className="one-half column",
                     id="title",
                 ),
 
                 html.Div(
-                    [
+                    [  
                         html.H3("The second presidential debate"),
                         html.H5(title.values[0][0]),
-                        dcc.Link('Go to knowledge-base', href='/use-case'),
                     ],
                     className="one-half column",
                     id="link",
@@ -139,7 +139,7 @@ page1_layout = html.Div(
                             options=update_options(),
                             optionHeight=100,
                             multi=False,
-                            # value=[],
+                            value='~a>~d',
                             className="dcc_control",
                         ),
                     ],
@@ -176,7 +176,8 @@ page1_layout = html.Div(
         html.Div([
 
             dcc.Markdown('''
-            ###### **Dialogical Explanation** is a simulation of a debate over the chosen claim &nbsp;&nbsp; >click an argument in the graph above to start<
+            ###### **Dialogical Explanation** is a simulation of the chosen claim in the debate &nbsp;&nbsp; \
+                         >click an argument in the graph above to start<
                         ''')
 
         ], className="pretty_container nine columns"
@@ -201,7 +202,7 @@ page1_layout = html.Div(
                 html.Div(
                     [
                         dcc.Markdown('''
-                        **Select a set of premises** to see a derivation inside of the chosen argument
+                        **Select a set of premises** to see a derivation inside the chosen argument
                         '''),
 
                         dcc.Dropdown(
