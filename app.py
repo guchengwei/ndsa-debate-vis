@@ -23,7 +23,8 @@ app = dash.Dash(__name__, suppress_callback_exceptions=True,
                 meta_tags=[{"name": "viewport", "content": "width=device-width"}])
 server = app.server
 
-file_path = 'data/debate kb.csv'
+# file_path = '/home/ziongu/ndsa-debate-vis/data/debate_kb.csv'
+file_path = 'data/debate_kb.csv'
 
 title = pd.read_csv(file_path, nrows=1, header=None)
 
@@ -89,7 +90,7 @@ style = {
 
 }
 
-app.title = 'NDSA Visualization'
+app.title = 'NDSA Visualization Demo'
 
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
@@ -113,8 +114,8 @@ page1_layout = html.Div(
                 ),
 
                 html.Div(
-                    [  
-                        html.H3("The second presidential debate"),
+                    [
+                        html.H3("Biden VS Trump 2020 The second presidential debate"),
                         html.H5(title.values[0][0]),
                     ],
                     className="one-half column",
@@ -153,8 +154,10 @@ page1_layout = html.Div(
 
         html.Div([
 
-            dcc.Markdown(
-                '''###### **Argument Relation Graph** displays the relation between arguments related to the chosen claim ''')
+            dcc.Markdown('''
+            ###### **Argument Relation Graph**
+            >the relation of arguments related to the chosen claim is shown
+                ''')
 
         ], className="pretty_container seven columns"
         ),
@@ -176,8 +179,8 @@ page1_layout = html.Div(
         html.Div([
 
             dcc.Markdown('''
-            ###### **Dialogical Explanation** is a simulation of the chosen claim in the debate &nbsp;&nbsp; \
-                         >click an argument in the graph above to start<
+            ###### **Dialogical Explanation** is a simulation of the chosen claim in the debate &nbsp;&nbsp;
+            >click an argument in the **Argument Relation Graph** to start
                         ''')
 
         ], className="pretty_container nine columns"
@@ -207,7 +210,7 @@ page1_layout = html.Div(
 
                         dcc.Dropdown(
                             id="premises-dropdown",
-                            placeholder='Hover to see detail',
+                            placeholder='Hover to see the detail',
                             multi=False,
                             # value=[],
                             className='dcc_control'
@@ -232,7 +235,8 @@ page1_layout = html.Div(
                     [
                         html.Div([
                             dcc.Markdown('''
-                            ###### **Natural Language Explanation** gives a proof about the chosen argument
+                            ###### **Natural Language Explanation**
+                            >a proof of the chosen argument
                             ''')
                         ], className="pretty_container twelve columns"),
 
@@ -272,7 +276,7 @@ def main_work(claim, n_clicks):
         redraw = False
 
     try:
-        with open('data/cache_ext.txt') as cache_file:
+        with open('/home/ziongu/ndsa-debate-vis/data/cache_ext.txt') as cache_file:
             ext_dic = json.load(cache_file)
 
         raw_ext = ast.literal_eval(ext_dic[claim].replace('set()', '"empty_set"'))  # because ast cannot read set()
@@ -287,7 +291,7 @@ def main_work(claim, n_clicks):
         extension = Extensions.__new__(Extensions)
         extension.__dict__.update(raw_ext)
 
-        with open('data/cache_premises.txt') as cache_file:
+        with open('/home/ziongu/ndsa-debate-vis/data/cache_premises.txt') as cache_file:
             premises_dic = json.load(cache_file)
 
         separated_set_of_premises = premises_dic[claim]
@@ -455,10 +459,10 @@ def natural_language_transform(proof):
         if match.empty:
             raw_clause, number_of_not = deal_with_not(prop)
 
-            clause = '_it is not the case that_ '
+            clause = '__it is not the case that__ '
 
             while number_of_not > 1:
-                clause += '_it is not the case that_ '
+                clause += '__it is not the case that__ '
                 number_of_not -= 1
 
             clause += [item.proof for item in raw_clause.itertuples()][0]
@@ -497,10 +501,10 @@ def natural_language_transform(proof):
                     if therefore_match.empty:
                         raw_therefore, number_of_not = deal_with_not(therefore)
 
-                        str_therefore = '_it is not the case that_ '
+                        str_therefore = '__it is not the case that__ '
 
                         while number_of_not > 1:
-                            str_therefore += '_it is not the case that_ '
+                            str_therefore += '__it is not the case that__ '
                             number_of_not -= 1
 
                         str_therefore += [item.proof for item in raw_therefore.itertuples()][0]
@@ -531,10 +535,10 @@ def natural_language_transform(proof):
                     if therefore_match.empty:
                         raw_therefore, number_of_not = deal_with_not(therefore)
 
-                        str_therefore = '_it is not the case that_ '
+                        str_therefore = '__it is not the case that__ '
 
                         while number_of_not > 1:
-                            str_therefore += '_it is not the case that_ '
+                            str_therefore += '__it is not the case that__ '
                             number_of_not -= 1
 
                         str_therefore += [item.proof for item in raw_therefore.itertuples()][0]
@@ -554,10 +558,10 @@ def natural_language_transform(proof):
                     if conclusion_match.empty:
                         raw_conclusion, number_of_not = deal_with_not(conclusion_if)
 
-                        str_conclusion = '_it is not the case that_ '
+                        str_conclusion = '__it is not the case that__ '
 
                         while number_of_not > 1:
-                            str_conclusion += '_it is not the case that_ '
+                            str_conclusion += '__it is not the case that__ '
                             number_of_not -= 1
 
                         str_conclusion += [item.proof for item in raw_conclusion.itertuples()][0]
@@ -586,10 +590,10 @@ def natural_language_transform(proof):
 
                             raw_assume2, number_of_not = deal_with_not(assume2)
 
-                            str_assume2 = '_it is not the case that_ '
+                            str_assume2 = '__it is not the case that__ '
 
                             while number_of_not > 1:
-                                str_assume2 += '_it is not the case that_ '
+                                str_assume2 += '__it is not the case that__ '
                                 number_of_not -= 1
 
                             str_assume2 += [item.proof for item in raw_assume2.itertuples()][0]
@@ -612,10 +616,10 @@ def natural_language_transform(proof):
                     if therefore_match.empty:
                         raw_therefore, number_of_not = deal_with_not(therefore)
 
-                        str_therefore = '_it is not the case that_ '
+                        str_therefore = '__it is not the case that__ '
 
                         while number_of_not > 1:
-                            str_therefore += '_it is not the case that_ '
+                            str_therefore += '__it is not the case that__ '
                             number_of_not -= 1
 
                         str_therefore += [item.proof for item in raw_therefore.itertuples()][0]
@@ -744,7 +748,7 @@ def dialogical_graph(extension, arg_number):
     #             )
 
     fig.update_layout(
-        title='hover to see detail',
+        title='hover to see the detail',
         autosize=True,
         # legend=dict(font=dict(size=10), orientation="h"),
         showlegend=False,
@@ -844,7 +848,7 @@ def argument_graph(extension, separated_form=None, redraw=False):
 
     figure.update_layout(
         title={
-            'text': "Hover to see detail",
+            'text': "Hover to see the detail",
             'y': 1.0,
             'x': 0.5,
             'xanchor': 'center',
@@ -1015,37 +1019,37 @@ page2_layout = html.Div([
         * N stands for norm.
         * T stands for Trump's speech.
         * B stands for Biden's speech.\
-              
+
     * origin: the origin speech passage extracted from the debate transcript.\
 
     * speaker: who the passage related to.\
 
     * type: indicates the type of each passage.\
-        
+
         * statement: a passage extracted from the original speech.\
-        
+
         * conclusion: statement that can be treated as a conclusion of the whole speech.\
-        
+
             * Conclusion that is not in the original speech but given implicitly has (hidden) mark.\
-                         
-        * norm()[]: also called unexpressed premises, added accordingly in order to 
+
+        * norm()[]: also called unexpressed premises, added accordingly in order to
                        transform __enthymematic__ proof into __syllogistic__ proof.\
-                       
-            * Within the () can be strict or defeasible. Strict means that this norm are treated as truth, 
+
+            * Within the () can be strict or defeasible. Strict means that this norm are treated as truth,
                    therefore cannot be attacked. Defeasible means this norm can be attacked.\
-                   
+
             * Within the [] is the statement the norm corresponding to.\
-              
+
     * proof: a summary of the original speech passage that shown in the detail and proof.\
 
     * proposition: act as a code of the passage to go through the proof machinery.\
 
     * group: indicates which group the passage belongs to.\
-    
+
         * Each group is named after the proposition of one of the conclusions.\
-                
+
         * In this knowledge base, conclusion = {c, p, a, b, ~b, ~c} and group = {c, p, a, b}.\
-                
+
         * Note that b and ~b as well as c and ~c are in the same group for they attack each other.\
     '''
     ),

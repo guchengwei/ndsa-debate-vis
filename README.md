@@ -1,11 +1,7 @@
 # ndsa-debate-vis
  
-This is a ready to deploy non-expert version for NDSA.
+ready to deploy non-expert version
 
-For related packages, please refer to requirements.txt.
-
-Visit the link below to see the web app hosted online.
+for pakages, see requirements.txt
 
 >  ~https://ndsa-debate-visualization.herokuapp.com/~
-> 
-> http://ndsa-ziongu.pythonanywhere.com/

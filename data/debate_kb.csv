@@ -1,0 +1,46 @@
+﻿Q1: How would you lead the country during this next stage of the coronavirus crisis?,,,,,,
+number,origin,speaker,type,proof,proposition,group
+T1,2.2 million people modeled out were expected to die. ,DONALD TRUMP,statement,"if Trump did nothing, 2.2 million people would have died",~a>~d,a
+T2,We closed up the greatest economy in the world in order to fight this horrible disease ,DONALD TRUMP,statement,Trump closed up the country,e,a
+T3, that came from China. ,DONALD TRUMP,statement,disease came from China,f,b
+T4,It's a worldwide pandemic. It's all over the world.  You see the spikes in Europe and many other places right now.  ,DONALD TRUMP,statement,it's a worldwide pandemic.There are spikes in Europe and many other places right now,g,b
+T5,"Uh, if you notice, the mortality rate is down 85 percent.  Uh, the excess mortality rate is way down and much lower than almost every other country,",DONALD TRUMP,statement,the mortality rate of U.S. is much lower than almost every other country,h,a
+T6,"and we're fighting it, and we're fighting it hard.  There is a spike – there was a spike in Florida, and it's now gone.  There was a very big spike in Texas; it's now gone.  There was a very big spike in Arizona; it's now gone, and there are some spikes and surges in other places.  They will soon be gone.  ",DONALD TRUMP,statement,Trump are fighting it hard since there were some spikes and surges and they are all gone now ,i,ac
+T7,"We have a vaccine that's coming.  It's ready.  It's going to be announced within weeks, and it's going to be delivered.  We have, uh, Operation Warp Speed, which is – the military is going to distribute the vaccine.  ",DONALD TRUMP,statement,U.S. will have a vaccine within weeks,j,c
+T8,"I can tell you from personal experience that, uh, I was in the hospital.  I had it and I got better, and I will tell you that, uh, I had something that they gave me, a therapeutic, I guess they would call it.  Some people could say it was a cure, but, uh, I was in for a short period of time and I got better very fast, or I wouldn't be here tonight, and now they say I'm immune.  Whether it's 4 months or a lifetime, nobody's been able to say that, but I'm immune. Uh, more and more people are getting better.   ",DONALD TRUMP,statement,Trump had it and got better very fast as well as More and more people getting better,k,c
+T9,"We have, uh, a problem that's a worldwide problem.  This is a worldwide problem, but I've been congratulated by the heads of many countries on what we've been able to do,uh, with the – if you, if you take a look at what we've done in terms of goggles and masks and gowns and everything else, and, in particular, ventilators.  We're now making ventilators all over the world, thousands and thousands a month, distributing them all over the world.  ",DONALD TRUMP,statement,Trump is helping the world against the pandamic,l,a
+T10,"It will go away, and as I say, we're rounding the turn, we're rounding the corner.  It's going away.  ",DONALD TRUMP,conclusion,it's going away,c,c
+B1,"220,000 Americans dead.  If you hear nothing else I say tonight, hear this.  Anyone who's responsible for not taking control, in fact, not saying I'm – I take no responsibility initially, anyone who's responsible for that many deaths should not remain as President of the United States of America.  ",JOE BIDEN,statement,"Trump is responsible for not taking control of the death of 220,000 Americans ",d>~b,b
+B2,"We're in a situation where there are a thousand deaths a day now.  A thousand deaths a day, and there are over 70,000 new cases per day. Compared to what's going on in Europe, as the New England Medical Journal said, they're starting from a very low rate, we're starting from a very high rate.  ",JOE BIDEN,statement,"we are in a bad situation, as the New England Medical Journal said, U.S. are starting from a very high rate compare to Europe",r>~h,a
+B3,"The expectation is we'll have another 200,000 Americans dead between now and the end of the year.  ",JOE BIDEN,statement,"the expectation is another 200,000 Americans will die between now and the end of the year",s,c
+B4,"If we just wore these masks, the President's own advisors had told him, we could save 100,000 lives. ",JOE BIDEN,statement,"if Trump encouraged people to wear masks, 100,000 lives could be saved",o>~d,b
+B5,"And we're in a circumstance where the President, thus far, still has no plan, no comprehensive plan.  ",JOE BIDEN,statement,Trump has no plan,v,c
+B6,What I would do is make sure we have everyone encouraged to wear a mask all the time.  ,JOE BIDEN,statement,Biden will have everyone encouraged to wear a mask all the time,t,p
+B7,"I would make sure we move in the direction of rapid testing, investing in rapid testing. ",JOE BIDEN,statement,Biden will investing in rapid testing,w,p
+B8,I would make sure that we set up national standards as to how to open up schools and open up businesses so they can be safe ,JOE BIDEN,statement,Biden will set up national standards as to how to open up safely,x,p
+B9,"give them the wherewithal, the financial resources to be able to do that.  ",JOE BIDEN,statement,Biden will supports people with financial resources,y,p
+B10,"We're in a situation now where the New England Medical Journal, one of the serious, most-serious journals in the, in the whole world, said for the first time ever that this, the way this President has responded to this crisis has been absolutely tragic.  ",JOE BIDEN,statement,the New England Medical Journal claimed that the way Trump has responded to this crisis has been absolutely tragic,r>~a,a
+B11,"And so folks, I will take care of this.  I will end this.  I will make sure we have a plan.  ",JOE BIDEN,conclusion,Biden will end this with a plan,p,p
+N1,/,DONALD TRUMP / JOE BIDEN,norm(strict)[],"223,262 Americans at that moment died",d,ab
+N2,/,DONALD TRUMP,norm(defeasible)[e],closing the boundary is a response,e>a,a
+N3,/,DONALD TRUMP,norm(defeasible)[f],the disease came from elsewhere therefore it's not just Trump's problem,f>b,b
+N4,/,DONALD TRUMP,norm(defeasible)[g],the disease also happens in elsewhere therefore it's not just Trump's problem,g>b,b
+N5,/,DONALD TRUMP,norm(strict)[h],Trump did well since mortality rate in U.S. is very low among countries,h>a,a
+N6,/,DONALD TRUMP,norm(defeasible)[i],Trump did well since Trump settled the spikes,i>a,a
+N7,/,DONALD TRUMP,norm(defeasible)[i],Trump will win against spikes in the future as Trump did before,i>c,c
+N8,/,DONALD TRUMP,norm(defeasible)[j],once vaccine come the disease gone,j>c,c
+N9,/,DONALD TRUMP,norm(defeasible)[k],people don't have to worry since the disease can be cured,k>c,c
+N10,/,DONALD TRUMP,norm(defeasible)[l],Trump made a good response since he was helping the world,l>a,a
+N11,/,JOE BIDEN,norm(strict)[s],"another 200,000 Americans might die till the end of year is a bad situation",s>~c,c
+N12,/,JOE BIDEN,norm(strict)[t],encouraging people to wear mask is part of the plan,t>p,p
+N13,/,JOE BIDEN,norm(strict)[w],investing rapid testing is part of the plan,w>p,p
+N14,/,JOE BIDEN,norm(strict)[x],standard is essential for opening up safely,x>z,p
+N15,/,JOE BIDEN,norm(strict)[y],financial resources is essential for opening up safely,y>z,p
+N16,/,JOE BIDEN,norm(strict)[],a safe open up is necessary for American people,z,p
+N17,/,JOE BIDEN,norm(strict)[z],opening up safely is part of the plan,z>p,p
+N18,/,JOE BIDEN,norm(strict)[],New England Medical Journal is one of the most serious journals in the whole world,r,a
+N19,/,JOE BIDEN,norm(defeasible)[v],without a plan pandemic won't end,v>~c,c
+C1,/,DONALD TRUMP,conclusion(hidden),Trump made a good response to pandemic,a,a
+C2,/,DONALD TRUMP,conclusion(hidden),it is not just Trump's fault,b,b
+C3,/,JOE BIDEN,conclusion(hidden),it's Trump's responsibility,~b,b
+C4,/,JOE BIDEN,conclusion(hidden),the situation is bad,~c,c
