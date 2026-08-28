@@ -178,9 +178,12 @@ def _layered_positions(extension):
     layers = [fallback_layer if distance == float("inf") else int(distance) for distance in distances]
 
     layout = layout_graph.layout_sugiyama(layers=layers, hgap=2.5, vgap=1.0, maxiter=200)
+    # Sugiyama may append dummy vertices for long edges; the first |V| rows
+    # always correspond to original graph vertices.
     positions = {}
-    for node, coordinate in enumerate(layout):
-        positions[node] = (float(coordinate[0]) * 3.4, -float(layers[node]) * 2.1)
+    for node in range(count):
+        coordinate = layout[node]
+        positions[node] = (float(coordinate[0]) * 3.4, -float(coordinate[1]) * 2.1)
     return positions, layers
 
 
@@ -249,7 +252,7 @@ def argument_graph(extension):
             x=x_values,
             y=y_values,
             mode="markers",
-            marker={"size": 100, "color": "rgba(0,0,0,0.001)"},
+            marker={"size": 180, "color": "rgba(0,0,0,0.001)"},
             customdata=custom_data,
             hovertext=hover_values,
             hovertemplate="%{hovertext}<extra></extra>",
