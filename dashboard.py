@@ -888,6 +888,8 @@ page1_layout = html.Div(
     ]
 )
 
+SOURCE_COLUMNS = ["number", "speaker", "type", "proof", "proposition", "origin", "group"]
+
 page2_layout = html.Div(
     [
         html.Header(
@@ -896,7 +898,10 @@ page2_layout = html.Div(
                     [
                         html.P("NDSA · source model", className="eyebrow"),
                         html.H1("Knowledge base"),
-                        html.P(title.values[0][0], className="lede"),
+                        html.P(
+                            "See how debate passages and modeling norms become the readable and symbolic statements used by the argument engine.",
+                            className="lede",
+                        ),
                     ]
                 ),
                 dcc.Link("Back to visualization", href="/", className="secondary-link"),
@@ -907,13 +912,50 @@ page2_layout = html.Div(
             [
                 html.Section(
                     [
+                        html.H2("From debate passage to proposition"),
+                        html.P(title.values[0][0]),
+                        dcc.Markdown(
+                            """
+Read left to right:
+
+1. **number** identifies the source row; **speaker** and **type** tell you where it comes from.
+2. **proof** is the concise wording used in the visual explanations; **proposition** is the symbolic form used by the reasoning engine.
+3. **origin** keeps the full debate passage for traceability, while **group** records the argument family used to bound the search.
+                            """
+                        ),
+                    ],
+                    className="panel prose-panel",
+                ),
+                html.Section(
+                    [
+                        html.Div(
+                            [
+                                html.Div(
+                                    [
+                                        html.P("01", className="section-index"),
+                                        html.Div(
+                                            [
+                                                html.H2("Source rows"),
+                                                html.P(
+                                                    "Filter any column to narrow the source model, or sort a header to compare speakers, statement types, and logical forms. No source fields are hidden.",
+                                                    className="section-copy",
+                                                ),
+                                            ]
+                                        ),
+                                    ],
+                                    className="section-title-row",
+                                ),
+                            ],
+                            className="section-heading",
+                        ),
                         dash_table.DataTable(
                             id="table",
-                            columns=[{"name": i, "id": i} for i in df.columns],
+                            columns=[{"name": column, "id": column} for column in SOURCE_COLUMNS],
                             data=df.to_dict("records"),
-                            page_size=20,
+                            page_size=15,
                             sort_action="native",
                             filter_action="native",
+                            fixed_rows={"headers": True},
                             style_table={"overflowX": "auto"},
                             style_cell={
                                 "textAlign": "left",
@@ -922,8 +964,24 @@ page2_layout = html.Div(
                                 "fontFamily": "Inter, ui-sans-serif, system-ui, sans-serif",
                                 "fontSize": 13,
                                 "padding": "10px",
+                                "minWidth": 110,
                                 "maxWidth": 320,
                             },
+                            style_cell_conditional=[
+                                {"if": {"column_id": "number"}, "minWidth": 72, "width": 72, "maxWidth": 72},
+                                {"if": {"column_id": "speaker"}, "minWidth": 130, "width": 130, "maxWidth": 150},
+                                {"if": {"column_id": "type"}, "minWidth": 150, "width": 150, "maxWidth": 180},
+                                {"if": {"column_id": "proof"}, "minWidth": 280, "width": 300, "maxWidth": 340},
+                                {
+                                    "if": {"column_id": "proposition"},
+                                    "minWidth": 140,
+                                    "width": 150,
+                                    "maxWidth": 180,
+                                    "fontFamily": "SFMono-Regular, Consolas, Liberation Mono, monospace",
+                                },
+                                {"if": {"column_id": "origin"}, "minWidth": 360, "width": 420, "maxWidth": 480},
+                                {"if": {"column_id": "group"}, "minWidth": 72, "width": 72, "maxWidth": 90},
+                            ],
                             style_header={"fontWeight": 700, "backgroundColor": "#f2f4f7"},
                         ),
                     ],
@@ -934,12 +992,12 @@ page2_layout = html.Div(
                         html.H2("Field guide"),
                         dcc.Markdown(
                             """
-- **number** — source passage identifier. `T` = Trump, `B` = Biden, `C` = conclusion, `N` = norm.
-- **origin** — original debate passage.
-- **speaker** — participant associated with the passage.
-- **type** — statement, conclusion, or strict/defeasible unexpressed premise.
-- **proof** — shortened natural-language form used in explanations.
-- **proposition** — symbolic representation used by the proof machinery.
+- **number** — source passage identifier. `T` = Trump, `B` = Biden, `C` = conclusion, `N` = modeling norm.
+- **speaker** — participant associated with the passage or norm.
+- **type** — source statement/conclusion or a strict/defeasible modeling norm.
+- **proof** — shortened natural-language form used in the visual explanations.
+- **proposition** — symbolic representation consumed by the proof machinery.
+- **origin** — original debate passage; modeling norms use `/` because they are added assumptions rather than transcript quotations.
 - **group** — argument family used to bound the search space.
                             """
                         ),
