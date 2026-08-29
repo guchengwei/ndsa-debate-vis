@@ -15,7 +15,7 @@ The proposed system turns a propositional-logic knowledge base into several comp
 
 ## Prototype status
 
-This repository contains research-prototype code, not a verified production application. The historical deployment is no longer available, and the current runtime and legacy deployment configuration have not been independently validated. Expect defects, outdated assumptions, and environment-specific paths.
+This repository contains research-prototype code, not a verified production application. The historical deployment is no longer available. The pinned Python runtime is exercised in CI, but the legacy deployment configuration has not been independently validated. Expect defects, outdated assumptions, and environment-specific paths.
 
 The landing page under [`docs/`](docs/) is a static introduction to the research. It does not run or validate the Python application.
 
