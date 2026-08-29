@@ -518,6 +518,15 @@ a {
     border-radius: 14px;
   }
 
+  .panel {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .panel .graph {
+    min-width: 900px;
+  }
+
   .section-title-row {
     gap: 7px;
   }
