@@ -100,14 +100,21 @@ def load_argument_state(claim):
     return extension, separated_premises
 
 
-def argument_status(extension, node):
+def argument_statuses(extension, node):
+    statuses = []
     if node in extension.grounded:
-        return "grounded"
+        statuses.append("grounded")
     if node in extension.ideal:
-        return "ideal"
-    if any(node in candidate for candidate in extension.admissible):
-        return "admissible"
-    return "not accepted"
+        statuses.append("ideal")
+    if not statuses and any(node in candidate for candidate in extension.admissible):
+        statuses.append("admissible")
+    if not statuses:
+        statuses.append("not accepted")
+    return statuses
+
+
+def argument_status(extension, node):
+    return argument_statuses(extension, node)[0]
 
 
 def strip_markup(value):
@@ -169,7 +176,6 @@ def _layered_positions(extension):
 
     layout_graph = igraph.Graph(directed=True)
     layout_graph.add_vertices(count)
-    # Layout direction is intentionally reversed: focal argument -> attacker -> counter-attacker.
     layout_graph.add_edges([(attackee, attacker) for attacker, attackee in extension.relation])
 
     distances = layout_graph.distances(source=0, mode="out")[0]
@@ -178,8 +184,6 @@ def _layered_positions(extension):
     layers = [fallback_layer if distance == float("inf") else int(distance) for distance in distances]
 
     layout = layout_graph.layout_sugiyama(layers=layers, hgap=2.5, vgap=1.0, maxiter=200)
-    # Sugiyama may append dummy vertices for long edges; the first |V| rows
-    # always correspond to original graph vertices.
     positions = {}
     for node in range(count):
         coordinate = layout[node]
@@ -219,15 +223,17 @@ def argument_graph(extension):
     for node in extension.arguments:
         x, y = positions[node]
         _, _, support_text, claim_text = _argument_data(extension, node)
-        status = argument_status(extension, node)
-        style = STATUS_STYLE[status]
+        statuses = argument_statuses(extension, node)
+        primary_status = statuses[0]
+        style = STATUS_STYLE[primary_status]
+        status_label = " · ".join(STATUS_STYLE[status]["label"] for status in statuses)
 
         x_values.append(x)
         y_values.append(y)
         custom_data.append([node])
         hover_values.append(
             f"<b>Argument A{node}</b><br>{strip_markup(claim_text)}"
-            f"<br><br><b>Status</b>: {style['label']}"
+            f"<br><br><b>Status</b>: {status_label}"
             f"<br><br><b>Supported by</b><br>{support_text or 'No explicit premises'}"
         )
 
@@ -246,7 +252,6 @@ def argument_graph(extension):
             captureevents=False,
         )
 
-    # Transparent hit targets preserve selection while the visual layout stays static.
     fig.add_trace(
         go.Scatter(
             x=x_values,
@@ -288,16 +293,88 @@ def argument_graph(extension):
     return fig
 
 
+def _collapse_dialogical_explanation(edges, vertices, node_dict, arg_dict, root_dict):
+    children = {node: [] for node in range(vertices)}
+    for source, target in edges:
+        children[source].append(target)
+
+    component = {}
+    depth = {}
+    for root in sorted(root_dict):
+        queue = [(root, 0)]
+        while queue:
+            node, node_depth = queue.pop(0)
+            if node in component:
+                continue
+            component[node] = root
+            depth[node] = node_depth
+            queue.extend((child, node_depth + 1) for child in children.get(node, []))
+
+    key_to_new = {}
+    old_to_new = {}
+    collapsed_node_dict = {}
+    collapsed_arg_dict = {}
+    counts = {}
+    layers = []
+
+    for old_node in range(vertices):
+        tree_root = component.get(old_node, old_node if old_node in root_dict else -1)
+        node_depth = depth.get(old_node, 0)
+        key = (
+            tree_root,
+            node_depth,
+            node_dict.get(old_node, ""),
+            arg_dict.get(old_node),
+        )
+        if key not in key_to_new:
+            new_node = len(key_to_new)
+            key_to_new[key] = new_node
+            collapsed_node_dict[new_node] = node_dict.get(old_node, "")
+            if arg_dict.get(old_node):
+                collapsed_arg_dict[new_node] = arg_dict[old_node]
+            counts[new_node] = 0
+            layers.append(node_depth)
+        new_node = key_to_new[key]
+        old_to_new[old_node] = new_node
+        counts[new_node] += 1
+
+    collapsed_edges = sorted(
+        {
+            (old_to_new[source], old_to_new[target])
+            for source, target in edges
+            if old_to_new[source] != old_to_new[target]
+        }
+    )
+    collapsed_roots = {old_to_new[root]: status for root, status in root_dict.items()}
+
+    return (
+        collapsed_edges,
+        collapsed_node_dict,
+        collapsed_arg_dict,
+        collapsed_roots,
+        counts,
+        layers,
+    )
+
+
 def dialogical_graph(extension, arg_number):
     edges, vertices, node_dict, arg_dict, root_dict = extension.dialogical_explanations(arg_number)
     if vertices == 0:
         return go.Figure(), []
 
-    graph = igraph.Graph()
-    graph.add_vertices(vertices)
+    edges, node_dict, arg_dict, root_dict, counts, layers = _collapse_dialogical_explanation(
+        edges, vertices, node_dict, arg_dict, root_dict
+    )
+    collapsed_vertices = len(node_dict)
+
+    graph = igraph.Graph(directed=True)
+    graph.add_vertices(collapsed_vertices)
     graph.add_edges(edges)
-    layout = graph.layout("rt", root=[key for key in root_dict])
-    positions = {node: (float(layout[node][0]) * 3.1, -float(layout[node][1]) * 2.0) for node in range(vertices)}
+    layout = graph.layout_sugiyama(layers=layers, hgap=2.5, vgap=1.0, maxiter=200)
+    positions = {
+        node: (float(layout[node][0]) * 3.2, -float(layout[node][1]) * 2.0)
+        for node in range(collapsed_vertices)
+    }
 
     fig = go.Figure()
 
@@ -322,7 +399,7 @@ def dialogical_graph(extension, arg_number):
         )
 
     hover_x, hover_y, hover_text = [], [], []
-    for node in range(vertices):
+    for node in range(collapsed_vertices):
         label = node_dict.get(node, "")
         x, y = positions[node]
 
@@ -339,15 +416,22 @@ def dialogical_graph(extension, arg_number):
             fill = "#f2f4f7"
             border = "#667085"
 
+        path_suffix = f" · ×{counts[node]} paths" if counts[node] > 1 else ""
         if arg_dict.get(node):
             match = re.findall(r"\{(.*)\}\|-(.+)", arg_dict[node])
             conclusion = match[0][1] if match else ""
             claim_text = get_claim_text(conclusion) if conclusion else label
-            card_text = f"<b>{role} · {label.split(':')[-1].strip()}</b><br>{wrap_label(claim_text, 28, 2)}"
+            card_text = (
+                f"<b>{role} · {label.split(':')[-1].strip()}{path_suffix}</b>"
+                f"<br>{wrap_label(claim_text, 30, 2)}"
+            )
             hover = f"<b>{role}</b><br>{strip_markup(claim_text)}"
         else:
-            card_text = f"<b>{role}</b><br>{wrap_label(label, 28, 3)}"
+            card_text = f"<b>{role}{path_suffix}</b><br>{wrap_label(label, 30, 3)}"
             hover = strip_markup(label)
+
+        if counts[node] > 1:
+            hover += f"<br><br>Shared by {counts[node]} equivalent paths at this depth."
 
         fig.add_annotation(
             x=x,
@@ -360,7 +444,7 @@ def dialogical_graph(extension, arg_number):
             borderwidth=1.3,
             borderpad=7,
             font={"size": 11, "color": "#101828"},
-            width=205,
+            width=220,
             captureevents=False,
         )
         hover_x.append(x)
@@ -372,7 +456,7 @@ def dialogical_graph(extension, arg_number):
             x=hover_x,
             y=hover_y,
             mode="markers",
-            marker={"size": 86, "color": "rgba(0,0,0,0.001)"},
+            marker={"size": 92, "color": "rgba(0,0,0,0.001)"},
             hovertext=hover_text,
             hovertemplate="%{hovertext}<extra></extra>",
             showlegend=False,
@@ -381,13 +465,13 @@ def dialogical_graph(extension, arg_number):
 
     xs = [positions[node][0] for node in positions]
     ys = [positions[node][1] for node in positions]
-    depth = max((-positions[node][1] / 2.0 for node in positions), default=0)
+    max_depth = max(layers, default=0)
     fig.update_layout(
-        height=min(900, max(420, 175 * (int(depth) + 1))),
+        height=min(900, max(420, 170 * (max_depth + 1))),
         margin={"l": 30, "r": 30, "t": 20, "b": 30},
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
-        xaxis={"visible": False, "range": [min(xs) - 3.5, max(xs) + 3.5]},
+        xaxis={"visible": False, "range": [min(xs) - 3.8, max(xs) + 3.8]},
         yaxis={"visible": False, "range": [min(ys) - 1.2, max(ys) + 1.2]},
         hovermode="closest",
         dragmode="pan",
@@ -400,16 +484,19 @@ def dialogical_graph(extension, arg_number):
 
 def build_argument_detail(extension, arg_number):
     premises, conclusion, _, claim_text = _argument_data(extension, arg_number)
-    status = argument_status(extension, arg_number)
-    status_style = STATUS_STYLE[status]
+    statuses = argument_statuses(extension, arg_number)
     premise_count = len(premises)
+    status_children = [
+        html.Span(
+            STATUS_STYLE[status]["label"],
+            className=f"status-pill status-{status.replace(' ', '-')}",
+        )
+        for status in statuses
+    ]
     return html.Div(
         [
             html.Div(
-                [
-                    html.Span(f"A{arg_number}", className="argument-id"),
-                    html.Span(status_style["label"], className=f"status-pill status-{status.replace(' ', '-')}"),
-                ],
+                [html.Span(f"A{arg_number}", className="argument-id"), *status_children],
                 className="argument-detail-head",
             ),
             html.H3(strip_markup(claim_text), className="argument-detail-claim"),
@@ -718,7 +805,7 @@ page1_layout = html.Div(
                                     [
                                         html.H2("Selected argument"),
                                         html.P(
-                                            "Selection changes explanation, not graph geometry.",
+                                            "Equivalent states at the same depth are shared across paths; selection changes explanation, not graph geometry.",
                                             className="section-copy",
                                         ),
                                     ]
@@ -744,7 +831,7 @@ page1_layout = html.Div(
                                     [
                                         html.H2("Derivation"),
                                         html.P(
-                                            "Choose one minimal premise set to inspect the natural-deduction proof.",
+                                            "The first minimal premise set is shown automatically; choose another set when alternatives exist.",
                                             className="section-copy",
                                         ),
                                     ]
@@ -909,8 +996,9 @@ def after_click(payload, argument):
     _, conclusion, _, claim_text = _argument_data(extension, arg_number)
     figure, statuses = dialogical_graph(extension, arg_number)
     options = build_premise_options(payload.get("premises", {}), conclusion, claim_text)
+    selected_option = options[0]["value"] if options else None
     status_children = [html.Span(status, className="tree-status-pill") for status in statuses]
-    return figure, options, None, build_argument_detail(extension, arg_number), status_children
+    return figure, options, selected_option, build_argument_detail(extension, arg_number), status_children
 
 
 @app.callback(
