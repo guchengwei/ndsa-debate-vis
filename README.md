@@ -7,7 +7,7 @@ NDSA Debate Visualization is a research prototype for exploring conflicting clai
 The proposed system turns a propositional-logic knowledge base into several complementary explanations:
 
 - an **argument relation graph** showing arguments and attack relations;
-- a **dialogical explanation** represented as a dispute tree;
+- a **dialogical explanation** generated from dispute trees;
 - a **logical explanation** that derives a claim from its premises using natural deduction;
 - a **natural-language explanation** of the proof.
 
@@ -15,7 +15,7 @@ The proposed system turns a propositional-logic knowledge base into several comp
 
 ## Prototype status
 
-This repository contains research-prototype code, not a verified production application. The historical deployment is no longer available, and the current runtime and legacy deployment configuration have not been independently validated. Expect defects, outdated assumptions, and environment-specific paths.
+This repository contains research-prototype code, not a verified production application. The historical deployment is no longer available. The pinned Python runtime is exercised in CI, but the legacy deployment configuration has not been independently validated. Expect defects, outdated assumptions, and environment-specific paths.
 
 The landing page under [`docs/`](docs/) is a static introduction to the research. It does not run or validate the Python application.
 
@@ -23,11 +23,19 @@ The landing page under [`docs/`](docs/) is a static introduction to the research
 
 The thesis evaluates the method with a fragment of the second 2020 U.S. presidential debate. Statements from Donald Trump and Joe Biden are annotated as propositions, rules, and conclusions in [`data/debate_kb.csv`](data/debate_kb.csv). The example demonstrates how an inconsistent knowledge base can preserve disagreement while still supporting explicit reasoning.
 
+## Visualization approach
+
+The application uses a **deterministic layered argument map** rather than a force-directed graph. The focused argument is placed first, attackers are placed on the next layer, and counter-attackers continue outward. Red arrows retain the actual attack direction.
+
+The layout is static, but inspection remains interactive: users can pan/zoom, select an argument, inspect a reduced DAG view of its generated dispute-tree paths, and open the associated natural-deduction explanation without causing graph positions to move.
+
+The redesign deliberately reuses the existing Python/Plotly/igraph stack instead of adding a React graph editor. See [`docs/visualization-design.md`](docs/visualization-design.md) for the design rationale and a comparison with Argdown, Debate Map, OVA3, React Flow, G6, and ELK.
+
 ## Repository structure
 
 ```text
 .
-├── app.py                  Dash interface and callbacks
+├── app.py                  Dash interface, deterministic graph layout, and callbacks
 ├── argument_engine/
 │   ├── argument.py         Argument construction, attacks, and extensions
 │   ├── natural_deduction.py
@@ -35,9 +43,9 @@ The thesis evaluates the method with a fragment of the second 2020 U.S. presiden
 │   ├── nd_lookups.py
 │   ├── nd_rules.py
 │   └── tableaux.py
-├── assets/                 Dash styles and client-side helpers
+├── assets/                 Responsive Dash styles
 ├── data/                   Debate knowledge base and cached intermediate data
-└── docs/                   Static GitHub Pages introduction
+└── docs/                   Static introduction and visualization design notes
 ```
 
 ## Technology
@@ -45,7 +53,7 @@ The thesis evaluates the method with a fragment of the second 2020 U.S. presiden
 - Python 3.10
 - Dash and Flask
 - Plotly
-- NetworkX and igraph
+- igraph
 - pandas
 
 Pinned package versions are listed in [`requirements.txt`](requirements.txt).
@@ -61,7 +69,7 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-Before relying on the output, review the source for machine-specific paths and test the reasoning engine against known cases. In particular, deployment files and cached-data paths may require repair for a new environment.
+Before relying on the output, test the reasoning engine against known cases. Cached-data paths are resolved relative to the repository rather than a developer-specific home directory.
 
 ## GitHub Pages
 

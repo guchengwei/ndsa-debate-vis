@@ -1,1071 +1,1039 @@
-import dash
-from dash import dash_table
-from dash import dcc
-from dash import html
-
 import ast
+import copy
+import io
 import json
 import re
-import sys
-import io
-import pandas as pd
+import textwrap
+from contextlib import redirect_stdout
+from pathlib import Path
 
-import plotly.graph_objects as go
-import networkx as nx
+import dash
+from dash import dash_table, dcc, html
 import igraph
+import pandas as pd
+import plotly.graph_objects as go
 
-from argument_engine.argument import *
-from argument_engine.natural_deduction import *
+from argument_engine.argument import Extensions, FindArgument
+from argument_engine.natural_deduction import NaturalDeduction
 
-# external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+KB_PATH = DATA_DIR / "debate_kb.csv"
+CACHE_EXTENSION_PATH = DATA_DIR / "cache_ext.txt"
+CACHE_PREMISES_PATH = DATA_DIR / "cache_premises.txt"
 
-app = dash.Dash(__name__, suppress_callback_exceptions=True,
-                meta_tags=[{"name": "viewport", "content": "width=device-width"}])
+app = dash.Dash(
+    __name__,
+    suppress_callback_exceptions=True,
+    meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}],
+)
 server = app.server
+app.title = "NDSA Debate Visualization"
 
-# file_path = '/home/ziongu/ndsa-debate-vis/data/debate_kb.csv'
-file_path = 'data/debate_kb.csv'
+title = pd.read_csv(KB_PATH, nrows=1, header=None)
+df = pd.read_csv(KB_PATH, header=1)
 
-title = pd.read_csv(file_path, nrows=1, header=None)
+STATUS_STYLE = {
+    "grounded": {"fill": "#eaf7f0", "border": "#247a52", "label": "Grounded"},
+    "ideal": {"fill": "#eef3ff", "border": "#4464ad", "label": "Ideal"},
+    "admissible": {"fill": "#fff7e6", "border": "#ad6b00", "label": "Admissible"},
+    "not accepted": {"fill": "#f2f4f7", "border": "#667085", "label": "Not accepted"},
+}
 
-df = pd.read_csv(file_path, header=1)
+TREE_STATUS_COPY = {
+    "not a dispute tree": "Not accepted — the proponent cannot defend against an opponent.",
+    "not admissible": "Not admissible — an argument is used by both sides.",
+    "admissible": "Admissible — the proponent can defend against every attack in this tree.",
+    "grounded": "Grounded — the defence terminates.",
+    "ideal": "Ideal — opponents do not have an admissible counter-position.",
+    "grounded,ideal": "Grounded and ideal — the defence terminates and opponents lack an admissible counter-position.",
+}
 
 
 def update_options():
-    option_list = []
-
+    options = []
     for item in df.itertuples():
-
-        if item.number.startswith('T'):
-            an_option = {'label': 'From Trump: ' + item.proof, 'value': item.proposition}
-        elif item.number.startswith('B'):
-            an_option = {'label': 'From Biden: ' + item.proof, 'value': item.proposition}
-        elif item.number.startswith('C'):
-            an_option = {'label': 'In conclusion: ' + item.proof, 'value': item.proposition}
-        elif item.number.startswith('N'):
+        if item.number.startswith("T"):
+            prefix = "Trump"
+        elif item.number.startswith("B"):
+            prefix = "Biden"
+        elif item.number.startswith("C"):
+            prefix = "Conclusion"
+        elif item.number.startswith("N"):
             continue
-
         else:
-            print('ERROR')
-            raise Exception
-
-        option_list.append(an_option)
-
-    return option_list
+            continue
+        options.append({"label": f"{prefix} · {item.proof}", "value": item.proposition})
+    return options
 
 
-# colors = {
-#     "boxBackground": "#ffffff",
-#     "graphBackground": "#D4D4D4",
-#     "background": "#F5F5F5",
-#     "text": "#000000"
-# }
-
-# layout = dict(
-#     autosize=True,
-#     automargin=True,
-#     margin=dict(l=30, r=30, b=20, t=40),
-#     hovermode="closest",
-#     plot_bgcolor="#F9F9F9",
-#     paper_bgcolor="#F9F9F9",
-#     legend=dict(font=dict(size=10), orientation="h"),
-#     title="Overview"
-# )
-
-styles = {
-    'pre': {
-        'border': 'thin lightgrey solid',
-        'overflow': 'auto',
-        'paddingLeft': '10px',
-        'fontFamily': '"Lucida Console", Courier, monospace'
-    }
-}
-
-style = {
-    'border': 'thin lightgrey solid',
-    'overflow': 'auto',
-    'paddingLeft': '10px',
-    'fontFamily': '"Lucida Console", Courier, monospace',
-    'whiteSpace': 'pre-wrap',
-
-}
-
-app.title = 'NDSA Visualization Demo'
-
-app.layout = html.Div([
-    dcc.Location(id='url', refresh=False),
-    html.Div(id='page-content')
-])
-
-page1_layout = html.Div(
-    [
-        html.Div(id='extension', style={'display': 'none'}),
-        # empty Div to trigger javascript file for graph resizing
-        html.Div(id="output-clientside"),
-        html.Div(
-            [
-                html.Div(
-                    [
-                        html.H1("NDSA Debate Visualization"),
-                        dcc.Link('Go to knowledge-base', href='/use-case'),
-                    ],
-                    className="one-half column",
-                    id="title",
-                ),
-
-                html.Div(
-                    [
-                        html.H3("Biden VS Trump 2020 The second presidential debate"),
-                        html.H5(title.values[0][0]),
-                    ],
-                    className="one-half column",
-                    id="link",
-                )
-            ],
-            id="header",
-            className="row flex-display",
-            style={"marginBottom": "25px"},
-        ),
-        html.Div(
-            [
-                html.Div(
-                    [
-                        dcc.Markdown('''
-                        **Choose a claim** to draw the corresponding argument relation graph
-                        '''),
-
-                        dcc.Dropdown(
-                            id="candidate-dropdown",
-                            placeholder='Select a claim',
-                            options=update_options(),
-                            optionHeight=100,
-                            multi=False,
-                            value='~a>~d',
-                            className="dcc_control",
-                        ),
-                    ],
-                    className="pretty_container twelve columns",
-                    id="options",
-                ),
-
-            ],
-            className="row flex-display",
-        ),
-
-        html.Div([
-
-            dcc.Markdown('''
-            ###### **Argument Relation Graph**
-            >the relation of arguments related to the chosen claim is shown
-                ''')
-
-        ], className="pretty_container seven columns"
-        ),
-
-        html.Div(
-            [
-                html.Button('Redraw', id='redraw', n_clicks=0),
-                dcc.Loading(
-                    id="loading",
-                    type="default",
-                    fullscreen=True,
-                    children=[html.Div(dcc.Graph(id="main-graph"))]
-                ),
-            ],
-
-            className="pretty_container twelve columns",
-        ),
-
-        html.Div([
-
-            dcc.Markdown('''
-            ###### **Dialogical Explanation** is a simulation of the chosen claim in the debate &nbsp;&nbsp;
-            >click an argument in the **Argument Relation Graph** to start
-                        ''')
-
-        ], className="pretty_container nine columns"
-        ),
-
-        html.Div(
-            [
-
-                dcc.Loading(
-                    id="loading2",
-                    type="circle",
-                    fullscreen=True,
-                    children=[html.Div(dcc.Graph(id="dialogical"))]
-                ),
-
-            ],
-            className="pretty_container twelve columns",
-        ),
-
-        html.Div(
-            [
-                html.Div(
-                    [
-                        dcc.Markdown('''
-                        **Select a set of premises** to see a derivation inside the chosen argument
-                        '''),
-
-                        dcc.Dropdown(
-                            id="premises-dropdown",
-                            placeholder='Hover to see the detail',
-                            multi=False,
-                            # value=[],
-                            className='dcc_control'
-                        ),
-
-                        html.Hr(),
-
-                        html.P('Selected Premises'),
-
-                        html.Pre(id='selected-premises', style=style),
-
-                        html.Hr(),
-
-                        html.P('Claim'),
-
-                        html.Pre(id='claim', style=style)
-                    ],
-                    className="pretty_container six columns"
-                ),
-
-                html.Div(
-                    [
-                        html.Div([
-                            dcc.Markdown('''
-                            ###### **Natural Language Explanation**
-                            >a proof of the chosen argument
-                            ''')
-                        ], className="pretty_container twelve columns"),
-
-                        html.Div(id='NLP', className="pretty_container twelve columns")],
-
-                    className="pretty_container six columns"
-                )
-            ],
-            className="row flex-display",
-        ),
-    ],
-    id="mainContainer",
-    style={"display": "flex", "flex-direction": "column"},
-)
-
-app.clientside_callback(
-    dash.dependencies.ClientsideFunction(namespace="clientside", function_name="resize"),
-    dash.dependencies.Output("output-clientside", "children"),
-    [dash.dependencies.Input("main-graph", "figure")],
-)
-
-
-@app.callback([dash.dependencies.Output('main-graph', 'figure'),
-               dash.dependencies.Output('extension', 'children')
-               ],
-              [dash.dependencies.Input('candidate-dropdown', 'value'),
-               dash.dependencies.Input('redraw', 'n_clicks')
-               ])
-def main_work(claim, n_clicks):
-    if not claim:
-        raise dash.exceptions.PreventUpdate
-
-    changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
-    if 'redraw' in changed_id:
-        redraw = True
-    else:
-        redraw = False
-
-    try:
-        with open('/home/ziongu/ndsa-debate-vis/data/cache_ext.txt') as cache_file:
-            ext_dic = json.load(cache_file)
-
-        raw_ext = ast.literal_eval(ext_dic[claim].replace('set()', '"empty_set"'))  # because ast cannot read set()
-
-        for key in raw_ext:
-            if isinstance(raw_ext[key], list):
-                raw_ext[key] = [set() if item == 'empty_set' else item for item in raw_ext[key]]
-            else:
-                if raw_ext[key] == 'empty_set':
-                    raw_ext[key] = set()
-
-        extension = Extensions.__new__(Extensions)
-        extension.__dict__.update(raw_ext)
-
-        with open('/home/ziongu/ndsa-debate-vis/data/cache_premises.txt') as cache_file:
-            premises_dic = json.load(cache_file)
-
-        separated_set_of_premises = premises_dic[claim]
-
-    except:
-
-        knowledge_base = copy.deepcopy(df)
-
-        arguments, relation, separated_set_of_premises = FindArgument(knowledge_base).find_all(claim, combine=True)
-
-        extension = Extensions(arguments, relation)
-
-    dumped = json.dumps(str(extension.__dict__.copy()))
-
-    figure = argument_graph(extension, separated_form=separated_set_of_premises, redraw=redraw)
-
-    return figure, dumped
-
-
-@app.callback([dash.dependencies.Output('dialogical', 'figure'),
-               dash.dependencies.Output("premises-dropdown", "options")],
-              [dash.dependencies.Input('extension', 'children'),
-               dash.dependencies.Input('main-graph', 'clickData')])
-def after_click(dumped_extension, argument):
-    # print(argument)
-
-    if dumped_extension is None or argument is None:
-        raise dash.exceptions.PreventUpdate
-
-    else:
-        dumped = ast.literal_eval(json.loads(dumped_extension).replace('set()', '"empty_set"'))
-
-    for key in dumped:
-        if isinstance(dumped[key], list):
-            dumped[key] = [set() if item == 'empty_set' else item for item in dumped[key]]
-        else:
-            if dumped[key] == 'empty_set':
-                dumped[key] = set()
-
+def _restore_extension(raw_extension):
+    dumped = ast.literal_eval(raw_extension.replace("set()", '"empty_set"'))
+    for key, value in dumped.items():
+        if isinstance(value, list):
+            dumped[key] = [set() if item == "empty_set" else item for item in value]
+        elif value == "empty_set":
+            dumped[key] = set()
     extension = Extensions.__new__(Extensions)
     extension.__dict__.update(dumped)
+    return extension
 
+
+def _serialize_extension(extension):
+    return str(extension.__dict__.copy())
+
+
+def load_argument_state(claim):
     try:
-        union_form = argument['points'][0]['hovertext']
-        detail_info = argument['points'][0]['hovertemplate']
-    except:
-        raise dash.exceptions.PreventUpdate
+        with CACHE_EXTENSION_PATH.open(encoding="utf-8") as cache_file:
+            extension_cache = json.load(cache_file)
+        extension = _restore_extension(extension_cache[claim])
 
-    arg_number = int(re.findall(r'A(\d+)', union_form)[0])
+        with CACHE_PREMISES_PATH.open(encoding="utf-8") as cache_file:
+            premises_cache = json.load(cache_file)
+        separated_premises = premises_cache[claim]
+    except (FileNotFoundError, KeyError, ValueError, SyntaxError):
+        knowledge_base = copy.deepcopy(df)
+        arguments, relation, separated_premises = FindArgument(knowledge_base).find_all(claim, combine=True)
+        extension = Extensions(arguments, relation)
 
-    # arg = extension.original_arg[arg_number]
+    return extension, separated_premises
 
-    figure = dialogical_graph(extension, arg_number)
 
-    raw_premise = re.findall(r'\{(.+?)\}', union_form)
+def argument_statuses(extension, node):
+    statuses = []
+    if node in extension.grounded:
+        statuses.append("grounded")
+    if node in extension.ideal:
+        statuses.append("ideal")
+    if not statuses and any(node in candidate for candidate in extension.admissible):
+        statuses.append("admissible")
+    if not statuses:
+        statuses.append("not accepted")
+    return statuses
 
-    conclusion = re.findall(r'\|- (.+)', union_form)[0]
 
-    claim = re.findall(r'claims that<br><b>(.*?\.)<\/b>', detail_info)[0]
+def argument_status(extension, node):
+    return argument_statuses(extension, node)[0]
 
-    # premises = re.findall(r'<br><b>([^<>]*?<\/b>[^<>]*?\.)<br>', detail_info)
 
-    options = []
-    set_number = 1
-    for item in raw_premise:
-        set_length = len(item.split(', '))
+def strip_markup(value):
+    return re.sub(r"<[^>]+>", "", value or "")
 
-        premise_text = generate_support_claim_text(df, item.split(', '))
-        premise_text = premise_text.replace('<b>', '')
-        premise_text = premise_text.replace('</b>', '')
-        premise_text = premise_text.replace('<br>', '\n')
-        premise_text = premise_text  # remove \n at the end of string
 
-        set_info = 'Set number ' + str(set_number) + ', containing ' + str(set_length)
-        if set_length > 1:
-            set_info += ' premises'
+def wrap_label(value, width=30, max_lines=3):
+    clean = " ".join(strip_markup(value).split())
+    lines = textwrap.wrap(clean, width=width) or [clean]
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        lines[-1] = lines[-1].rstrip(" .") + "…"
+    return "<br>".join(lines)
+
+
+def get_claim_text(claim_str):
+    claim = df.loc[df["proposition"] == str(claim_str)]
+    if claim.empty:
+        claim, number_of_not = deal_with_not(str(claim_str))
+        text = "not that "
+        while number_of_not > 1:
+            text += "not that "
+            number_of_not -= 1
+        text += [item.proof for item in claim.itertuples()][0]
+        return text
+    return [item.proof for item in claim.itertuples()][0]
+
+
+def generate_support_claim_text(dataframe, supports_list, claim_str=None):
+    support_text = ""
+    for prop in supports_list:
+        support = dataframe.loc[dataframe["proposition"] == str(prop)]
+        if support.empty:
+            continue
+        row = next(support.itertuples())
+        single_text = row.proof
+        if row.type.startswith("statement"):
+            support_type = "Trump's statement" if row.speaker.startswith("D") else "Biden's statement"
         else:
-            set_info += ' premise'
+            support_type = "assumption"
+        support_text += f"<b>{support_type}</b>: {single_text[0].upper() + single_text[1:]}.<br><br>"
 
-        options.append({'label': set_info, 'title': premise_text,
-                        'value': '(' + item + ' AND ' + conclusion + ')'
-                                                                     '[' + premise_text + ' BREAK-LINE ' + claim + ']'})
-
-        set_number += 1
-
-    return figure, options
+    if claim_str is not None:
+        return support_text.removesuffix("<br><br>"), get_claim_text(claim_str)
+    return support_text.removesuffix("<br><br>")
 
 
-@app.callback([
-    dash.dependencies.Output('selected-premises', 'children'),
-    dash.dependencies.Output('claim', 'children'),
-    dash.dependencies.Output('NLP', 'children')],
-    [dash.dependencies.Input('premises-dropdown', 'value')])
-def after_choose_premises(premises_and_conclusion):
-    if not premises_and_conclusion:
-        raise dash.exceptions.PreventUpdate
+def _argument_data(extension, node):
+    raw_premise, conclusion = re.findall(r"\{(.*)\}\|-(.+)", extension.original_arg[node])[0]
+    premises = [] if raw_premise == "" else raw_premise.split(", ")
+    support_text, claim_text = generate_support_claim_text(df, premises, conclusion)
+    return premises, conclusion, support_text, claim_text
 
-    premises, conclusion = re.findall(r'\((.+) AND (.+)\)', str(premises_and_conclusion))[0]
 
-    premises_text, conclusion_text = re.findall(r'\[([\w\W]*) BREAK-LINE ([\w\W]*)\]', str(premises_and_conclusion))[0]
+def _layered_positions(extension):
+    count = len(extension.arguments)
+    if count == 1:
+        return {0: (0.0, 0.0)}, [0]
 
-    old_stdout = sys.stdout
-    new_stdout = io.StringIO()
-    sys.stdout = new_stdout
+    layout_graph = igraph.Graph(directed=True)
+    layout_graph.add_vertices(count)
+    layout_graph.add_edges([(attackee, attacker) for attacker, attackee in extension.relation])
 
-    ndp = NaturalDeduction(premises.split(', '), conclusion).prove()
+    distances = layout_graph.distances(source=0, mode="out")[0]
+    finite = [int(distance) for distance in distances if distance != float("inf")]
+    fallback_layer = (max(finite) + 1) if finite else 1
+    layers = [fallback_layer if distance == float("inf") else int(distance) for distance in distances]
 
-    sys.stdout = old_stdout
+    layout = layout_graph.layout_sugiyama(layers=layers, hgap=2.5, vgap=1.0, maxiter=200)
+    positions = {}
+    for node in range(count):
+        coordinate = layout[node]
+        positions[node] = (float(coordinate[0]) * 3.4, -float(coordinate[1]) * 2.1)
+    return positions, layers
 
-    nlp = natural_language_transform(ndp)
 
-    nlp_output = dcc.Markdown([nlp])
-    # nlp_output = html.Pre([nlp], style=style)
+def argument_graph(extension):
+    positions, layers = _layered_positions(extension)
+    fig = go.Figure()
 
-    return [premises_text], [conclusion_text], nlp_output
+    for attacker, attackee in extension.relation:
+        x0, y0 = positions[attacker]
+        x1, y1 = positions[attackee]
+        fig.add_annotation(
+            x=x1,
+            y=y1,
+            ax=x0,
+            ay=y0,
+            xref="x",
+            yref="y",
+            axref="x",
+            ayref="y",
+            showarrow=True,
+            arrowhead=2,
+            arrowsize=1.15,
+            arrowwidth=1.5,
+            arrowcolor="#d92d20",
+            opacity=0.55,
+        )
+
+    x_values = []
+    y_values = []
+    hover_values = []
+    custom_data = []
+
+    for node in extension.arguments:
+        x, y = positions[node]
+        _, _, support_text, claim_text = _argument_data(extension, node)
+        statuses = argument_statuses(extension, node)
+        primary_status = statuses[0]
+        style = STATUS_STYLE[primary_status]
+        status_label = " · ".join(STATUS_STYLE[status]["label"] for status in statuses)
+
+        x_values.append(x)
+        y_values.append(y)
+        custom_data.append([node])
+        hover_values.append(
+            f"<b>Argument A{node}</b><br>{strip_markup(claim_text)}"
+            f"<br><br><b>Status</b>: {status_label}"
+            f"<br><br><b>Supported by</b><br>{support_text or 'No explicit premises'}"
+        )
+
+        fig.add_annotation(
+            x=x,
+            y=y,
+            text=f"<b>A{node}</b><br>{wrap_label(claim_text)}",
+            showarrow=False,
+            align="left",
+            bgcolor=style["fill"],
+            bordercolor="#101828" if node == 0 else style["border"],
+            borderwidth=2.5 if node == 0 else 1.4,
+            borderpad=8,
+            font={"size": 12, "color": "#101828"},
+            width=220,
+            captureevents=False,
+        )
+
+    fig.add_trace(
+        go.Scatter(
+            x=x_values,
+            y=y_values,
+            mode="markers",
+            marker={"size": 180, "color": "rgba(0,0,0,0.001)"},
+            customdata=custom_data,
+            hovertext=hover_values,
+            hovertemplate="%{hovertext}<extra></extra>",
+            showlegend=False,
+        )
+    )
+
+    max_layer = max(layers) if layers else 0
+    xs = list(positions[node][0] for node in positions)
+    ys = list(positions[node][1] for node in positions)
+    x_pad = 3.8
+    y_pad = 1.3
+    fig.update_layout(
+        height=min(920, max(520, 180 * (max_layer + 1))),
+        margin={"l": 30, "r": 30, "t": 20, "b": 30},
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        hovermode="closest",
+        dragmode="pan",
+        xaxis={
+            "visible": False,
+            "range": [min(xs) - x_pad, max(xs) + x_pad],
+            "fixedrange": False,
+        },
+        yaxis={
+            "visible": False,
+            "range": [min(ys) - y_pad, max(ys) + y_pad],
+            "fixedrange": False,
+            "scaleanchor": None,
+        },
+        showlegend=False,
+    )
+    return fig
+
+
+def _collapse_dialogical_explanation(edges, vertices, node_dict, arg_dict, root_dict):
+    children = {node: [] for node in range(vertices)}
+    for source, target in edges:
+        children[source].append(target)
+
+    component = {}
+    depth = {}
+    for root in sorted(root_dict):
+        queue = [(root, 0)]
+        while queue:
+            node, node_depth = queue.pop(0)
+            if node in component:
+                continue
+            component[node] = root
+            depth[node] = node_depth
+            queue.extend((child, node_depth + 1) for child in children.get(node, []))
+
+    key_to_new = {}
+    old_to_new = {}
+    collapsed_node_dict = {}
+    collapsed_arg_dict = {}
+    counts = {}
+    layers = []
+
+    for old_node in range(vertices):
+        tree_root = component.get(old_node, old_node if old_node in root_dict else -1)
+        node_depth = depth.get(old_node, 0)
+        key = (
+            tree_root,
+            node_depth,
+            node_dict.get(old_node, ""),
+            arg_dict.get(old_node),
+        )
+        if key not in key_to_new:
+            new_node = len(key_to_new)
+            key_to_new[key] = new_node
+            collapsed_node_dict[new_node] = node_dict.get(old_node, "")
+            if arg_dict.get(old_node):
+                collapsed_arg_dict[new_node] = arg_dict[old_node]
+            counts[new_node] = 0
+            layers.append(node_depth)
+        new_node = key_to_new[key]
+        old_to_new[old_node] = new_node
+        counts[new_node] += 1
+
+    collapsed_edges = sorted(
+        {
+            (old_to_new[source], old_to_new[target])
+            for source, target in edges
+            if old_to_new[source] != old_to_new[target]
+        }
+    )
+    collapsed_roots = {old_to_new[root]: status for root, status in root_dict.items()}
+
+    return (
+        collapsed_edges,
+        collapsed_node_dict,
+        collapsed_arg_dict,
+        collapsed_roots,
+        counts,
+        layers,
+    )
+
+
+def dialogical_graph(extension, arg_number):
+    edges, vertices, node_dict, arg_dict, root_dict = extension.dialogical_explanations(arg_number)
+    if vertices == 0:
+        return go.Figure(), []
+
+    edges, node_dict, arg_dict, root_dict, counts, layers = _collapse_dialogical_explanation(
+        edges, vertices, node_dict, arg_dict, root_dict
+    )
+    collapsed_vertices = len(node_dict)
+
+    graph = igraph.Graph(directed=True)
+    graph.add_vertices(collapsed_vertices)
+    graph.add_edges(edges)
+    layout = graph.layout_sugiyama(layers=layers, hgap=2.5, vgap=1.0, maxiter=200)
+    positions = {
+        node: (float(layout[node][0]) * 3.2, -float(layout[node][1]) * 2.0)
+        for node in range(collapsed_vertices)
+    }
+
+    fig = go.Figure()
+
+    for source, target in edges:
+        x0, y0 = positions[source]
+        x1, y1 = positions[target]
+        fig.add_annotation(
+            x=x1,
+            y=y1,
+            ax=x0,
+            ay=y0,
+            xref="x",
+            yref="y",
+            axref="x",
+            ayref="y",
+            showarrow=True,
+            arrowhead=2,
+            arrowsize=1.0,
+            arrowwidth=1.2,
+            arrowcolor="#98a2b3",
+            opacity=0.75,
+        )
+
+    hover_x, hover_y, hover_text = [], [], []
+    for node in range(collapsed_vertices):
+        label = node_dict.get(node, "")
+        x, y = positions[node]
+
+        if label.startswith("P"):
+            role = "Proponent"
+            fill = "#ecfdf3"
+            border = "#2e8b57"
+        elif label.startswith("O"):
+            role = "Opponent"
+            fill = "#fff4ed"
+            border = "#c4320a"
+        else:
+            role = "Terminal state"
+            fill = "#f2f4f7"
+            border = "#667085"
+
+        path_suffix = f" · ×{counts[node]} paths" if counts[node] > 1 else ""
+        if arg_dict.get(node):
+            match = re.findall(r"\{(.*)\}\|-(.+)", arg_dict[node])
+            conclusion = match[0][1] if match else ""
+            claim_text = get_claim_text(conclusion) if conclusion else label
+            card_text = (
+                f"<b>{role} · {label.split(':')[-1].strip()}{path_suffix}</b>"
+                f"<br>{wrap_label(claim_text, 30, 2)}"
+            )
+            hover = f"<b>{role}</b><br>{strip_markup(claim_text)}"
+        else:
+            card_text = f"<b>{role}{path_suffix}</b><br>{wrap_label(label, 30, 3)}"
+            hover = strip_markup(label)
+
+        if counts[node] > 1:
+            hover += f"<br><br>Shared by {counts[node]} equivalent paths at this depth."
+
+        fig.add_annotation(
+            x=x,
+            y=y,
+            text=card_text,
+            showarrow=False,
+            align="left",
+            bgcolor=fill,
+            bordercolor=border,
+            borderwidth=1.3,
+            borderpad=7,
+            font={"size": 11, "color": "#101828"},
+            width=220,
+            captureevents=False,
+        )
+        hover_x.append(x)
+        hover_y.append(y)
+        hover_text.append(hover)
+
+    fig.add_trace(
+        go.Scatter(
+            x=hover_x,
+            y=hover_y,
+            mode="markers",
+            marker={"size": 92, "color": "rgba(0,0,0,0.001)"},
+            hovertext=hover_text,
+            hovertemplate="%{hovertext}<extra></extra>",
+            showlegend=False,
+        )
+    )
+
+    xs = [positions[node][0] for node in positions]
+    ys = [positions[node][1] for node in positions]
+    max_depth = max(layers, default=0)
+    fig.update_layout(
+        height=min(900, max(420, 170 * (max_depth + 1))),
+        margin={"l": 30, "r": 30, "t": 20, "b": 30},
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        xaxis={"visible": False, "range": [min(xs) - 3.8, max(xs) + 3.8]},
+        yaxis={"visible": False, "range": [min(ys) - 1.2, max(ys) + 1.2]},
+        hovermode="closest",
+        dragmode="pan",
+        showlegend=False,
+    )
+
+    statuses = [TREE_STATUS_COPY.get(root_dict[key], root_dict[key]) for key in sorted(root_dict)]
+    return fig, statuses
+
+
+def build_argument_detail(extension, arg_number):
+    premises, conclusion, _, claim_text = _argument_data(extension, arg_number)
+    statuses = argument_statuses(extension, arg_number)
+    premise_count = len(premises)
+    status_children = [
+        html.Span(
+            STATUS_STYLE[status]["label"],
+            className=f"status-pill status-{status.replace(' ', '-')}",
+        )
+        for status in statuses
+    ]
+    return html.Div(
+        [
+            html.Div(
+                [html.Span(f"A{arg_number}", className="argument-id"), *status_children],
+                className="argument-detail-head",
+            ),
+            html.H3(strip_markup(claim_text), className="argument-detail-claim"),
+            html.P(
+                f"{premise_count} premise{'s' if premise_count != 1 else ''} · click another map card to inspect it",
+                className="muted",
+            ),
+        ]
+    )
+
+
+def build_premise_options(separated_form, conclusion, claim_text):
+    raw = separated_form.get(str(conclusion), "")
+    premise_sets = re.findall(r"\{(.*?)\}", raw)
+    options = []
+    for index, item in enumerate(premise_sets, start=1):
+        premises = [] if not item else item.split(", ")
+        premise_html = generate_support_claim_text(df, premises)
+        premise_text = strip_markup(premise_html.replace("<br>", "\n"))
+        value = json.dumps(
+            {
+                "premises": premises,
+                "conclusion": conclusion,
+                "premises_text": premise_text,
+                "claim_text": strip_markup(claim_text),
+            }
+        )
+        count = len(premises)
+        options.append(
+            {
+                "label": f"Premise set {index} · {count} premise{'s' if count != 1 else ''}",
+                "title": premise_text,
+                "value": value,
+            }
+        )
+    return options
 
 
 def deal_with_not(clause):
     number_of_not = 0
     add_not = False
     while True:
-
-        if clause.startswith('~('):
+        if clause.startswith("~("):
             n_clause = clause[2:-1]
-
-        elif clause.startswith('~'):
+        elif clause.startswith("~"):
             n_clause = clause[1:]
-
         else:
-            if len(clause) == 1:
-                n_clause = '~' + clause
-            else:
-                n_clause = '~(' + clause + ')'
-
+            n_clause = "~" + clause if len(clause) == 1 else "~(" + clause + ")"
             add_not = True
 
         number_of_not += 1
-
-        match = df.loc[df['proposition'] == n_clause]
-
+        match = df.loc[df["proposition"] == n_clause]
         if not match.empty:
             break
-        elif add_not:
-            raise Exception
-        else:
-            clause = n_clause
-
+        if add_not:
+            raise ValueError(f"No proposition found for {clause}")
+        clause = n_clause
     return match, number_of_not
 
 
 def natural_language_transform(proof):
-    nlp = ''
-
-    proof_list = proof.split('\n')[:-1]
-
-    prop_list = ['']
+    nlp = ""
+    proof_list = proof.split("\n")[:-1]
+    prop_list = [""]
     index = 0
 
     while index < len(proof_list):
-        prefix = re.search(r'[0-9]+\.[\s\|]+', proof_list[index])
-
-        raw_prop = re.search(r'([^\w]|\b)([a-z\|\&\>\~\(\)])+', proof_list[index][prefix.end():])
-        prop = raw_prop.group().strip(' ')
-        match = df.loc[df['proposition'] == prop]
+        prefix = re.search(r"[0-9]+\.[\s\|]+", proof_list[index])
+        raw_prop = re.search(r"([^\w]|\b)([a-z\|\&\>\~\(\)])+", proof_list[index][prefix.end():])
+        prop = raw_prop.group().strip(" ")
+        match = df.loc[df["proposition"] == prop]
         if match.empty:
             raw_clause, number_of_not = deal_with_not(prop)
-
-            clause = '__it is not the case that__ '
-
-            while number_of_not > 1:
-                clause += '__it is not the case that__ '
-                number_of_not -= 1
-
+            clause = "__it is not the case that__ " * number_of_not
             clause += [item.proof for item in raw_clause.itertuples()][0]
-
         else:
             clause = [item.proof for item in match.itertuples()][0]
 
         prop_list.append(clause)
 
-        if prefix.group().count('|') == 1:
-
-            if 'Premise' not in proof_list[index]:
-                number = re.findall(r'[0-9]+', proof_list[index][prefix.end():])
+        if prefix.group().count("|") == 1:
+            if "Premise" not in proof_list[index]:
+                number = re.findall(r"[0-9]+", proof_list[index][prefix.end():])
                 if len(number) == 1:
-                    nlp += '__We have__ ' + clause + ', __given that__ ' + prop_list[int(number[0])] + '.\n\n'
+                    nlp += "__We have__ " + clause + ", __given that__ " + prop_list[int(number[0])] + ".\n\n"
                 else:
-                    nlp += '__We have__ ' + clause + ', __given that__ '
-                    nlp += ' __and__ '.join([prop_list[int(item)] for item in number])
-                    nlp += '.\n\n'
-
+                    nlp += "__We have__ " + clause + ", __given that__ "
+                    nlp += " __and__ ".join([prop_list[int(item)] for item in number])
+                    nlp += ".\n\n"
         else:
-            # record assumed prop (unfinished)
-            if 'RAA Assume' in proof_list[index]:
-
-                while re.search(r'[0-9]+\.[\s\|]+', proof_list[index]).group().count('|') != 1:
+            if "RAA Assume" in proof_list[index]:
+                while re.search(r"[0-9]+\.[\s\|]+", proof_list[index]).group().count("|") != 1:
                     index += 1
-                    prop_list.append('')
+                    prop_list.append("")
 
-                if 'Therefore' in proof_list[index]:
-                    therefore = re.search(r'([^\w]|\b)([a-z\|\&\>\~\(\)])+',
-                                          proof_list[index][re.search(r'[0-9]+\.[\s\|]+', proof_list[index]).end():]) \
-                        .group().strip(' ')
-
-                    therefore_match = df.loc[df['proposition'] == therefore]
-
-                    if therefore_match.empty:
-                        raw_therefore, number_of_not = deal_with_not(therefore)
-
-                        str_therefore = '__it is not the case that__ '
-
-                        while number_of_not > 1:
-                            str_therefore += '__it is not the case that__ '
-                            number_of_not -= 1
-
-                        str_therefore += [item.proof for item in raw_therefore.itertuples()][0]
-
-                    else:
-                        str_therefore = [item.proof for item in therefore_match.itertuples()][0]
-                else:
-                    raise Exception
-
+                if "Therefore" not in proof_list[index]:
+                    raise ValueError("Malformed RAA proof")
+                therefore = re.search(
+                    r"([^\w]|\b)([a-z\|\&\>\~\(\)])+",
+                    proof_list[index][re.search(r"[0-9]+\.[\s\|]+", proof_list[index]).end():],
+                ).group().strip(" ")
+                str_therefore = _proof_clause_to_text(therefore)
                 prop_list.append(str_therefore)
+                nlp += (
+                    "__If we assume that__ "
+                    + clause
+                    + ", __we will meet a contradiction. Therefore, we have__ "
+                    + str_therefore
+                    + ".\n\n"
+                )
 
-                nlp += '__If we assume that__ ' + clause + ', __we will meet a contradiction. Therefore, we have__ ' + \
-                       str_therefore + '.\n\n'
-
-            elif 'IfI Assume' in proof_list[index]:
-                while re.search(r'[0-9]+\.[\s\|]+', proof_list[index]).group().count('|') != 1:
+            elif "IfI Assume" in proof_list[index]:
+                while re.search(r"[0-9]+\.[\s\|]+", proof_list[index]).group().count("|") != 1:
                     index += 1
-                    prop_list.append('')
+                    prop_list.append("")
 
-                if 'Therefore' in proof_list[index]:
-                    n_prefix = re.search(r'[0-9]+\.[\s\|]+', proof_list[index])
+                if "Therefore" not in proof_list[index]:
+                    raise ValueError("Malformed implication-introduction proof")
+                n_prefix = re.search(r"[0-9]+\.[\s\|]+", proof_list[index])
+                therefore = re.search(
+                    r"([^\w]|\b)([a-z\|\&\>\~\(\)])+",
+                    proof_list[index][n_prefix.end():],
+                ).group().strip(" ")
+                str_therefore = _proof_clause_to_text(therefore)
+                conclusion_number = int(re.findall(r"[0-9]+", proof_list[index][n_prefix.end():])[1])
+                conclusion_if = re.search(
+                    r"([^\w]|\b)([a-z\|\&\>\~\(\)])+",
+                    proof_list[conclusion_number - 1][
+                        re.search(r"[0-9]+\.[\s\|]+", proof_list[conclusion_number - 1]).end():
+                    ],
+                ).group().strip(" ")
+                str_conclusion = _proof_clause_to_text(conclusion_if)
+                nlp += (
+                    "__If we assume that__ "
+                    + clause
+                    + ", __we will get__ "
+                    + str_conclusion
+                    + ". __Therefore, we have__ "
+                    + str_therefore
+                    + ".\n\n"
+                )
 
-                    therefore = re.search(r'([^\w]|\b)([a-z\|\&\>\~\(\)])+',
-                                          proof_list[index][n_prefix.end():]).group().strip(' ')
-
-                    therefore_match = df.loc[df['proposition'] == therefore]
-
-                    if therefore_match.empty:
-                        raw_therefore, number_of_not = deal_with_not(therefore)
-
-                        str_therefore = '__it is not the case that__ '
-
-                        while number_of_not > 1:
-                            str_therefore += '__it is not the case that__ '
-                            number_of_not -= 1
-
-                        str_therefore += [item.proof for item in raw_therefore.itertuples()][0]
-
-                    else:
-                        str_therefore = [item.proof for item in therefore_match.itertuples()][0]
-
-                    conclusion_number = int(re.findall(r'[0-9]+', proof_list[index][n_prefix.end():])[1])
-
-                    conclusion_if = re.search(r'([^\w]|\b)([a-z\|\&\>\~\(\)])+',
-                                              proof_list[conclusion_number - 1]
-                                              [re.search(r'[0-9]+\.[\s\|]+',
-                                                         proof_list[conclusion_number - 1]).end():]).group().strip(' ')
-
-                    conclusion_match = df.loc[df['proposition'] == conclusion_if]
-
-                    if conclusion_match.empty:
-                        raw_conclusion, number_of_not = deal_with_not(conclusion_if)
-
-                        str_conclusion = '__it is not the case that__ '
-
-                        while number_of_not > 1:
-                            str_conclusion += '__it is not the case that__ '
-                            number_of_not -= 1
-
-                        str_conclusion += [item.proof for item in raw_conclusion.itertuples()][0]
-
-                    else:
-                        str_conclusion = [item.proof for item in conclusion_match.itertuples()][0]
-
-                else:
-                    raise Exception
-
-                nlp += '__If we assume that__ ' + clause + ', __we will get__ ' + str_conclusion + \
-                       '. __Therefore, we have__ ' + str_therefore + '.\n\n'
-
-            elif 'Or Assume' in proof_list[index]:
-                str_assume2 = ''
-                while re.search(r'[0-9]+\.[\s\|]+', proof_list[index]).group().count('|') != 1:
+            elif "Or Assume" in proof_list[index]:
+                str_assume2 = ""
+                while re.search(r"[0-9]+\.[\s\|]+", proof_list[index]).group().count("|") != 1:
                     index += 1
-                    if 'Or Assume' in proof_list[index]:
-                        assume2 = re.search(r'([^\w]|\b)([a-z\|\&\>\~\(\)])+',
-                                            proof_list[index][re.search(r'[0-9]+\.[\s\|]+',
-                                                                        proof_list[index]).end():]).group().strip(' ')
-
-                        assume2_match = df.loc[df['proposition'] == assume2]
-
-                        if assume2_match.empty:
-
-                            raw_assume2, number_of_not = deal_with_not(assume2)
-
-                            str_assume2 = '__it is not the case that__ '
-
-                            while number_of_not > 1:
-                                str_assume2 += '__it is not the case that__ '
-                                number_of_not -= 1
-
-                            str_assume2 += [item.proof for item in raw_assume2.itertuples()][0]
-
-                        else:
-                            str_assume2 = [item.proof for item in assume2_match.itertuples()][0]
-
+                    if "Or Assume" in proof_list[index]:
+                        assume2 = re.search(
+                            r"([^\w]|\b)([a-z\|\&\>\~\(\)])+",
+                            proof_list[index][re.search(r"[0-9]+\.[\s\|]+", proof_list[index]).end():],
+                        ).group().strip(" ")
+                        str_assume2 = _proof_clause_to_text(assume2)
                         prop_list.append(str_assume2)
-
                     else:
-                        prop_list.append('')
+                        prop_list.append("")
 
-                if 'Therefore' in proof_list[index]:
-                    therefore = re.search(r'([^\w]|\b)([a-z\|\&\>\~\(\)])+',
-                                          proof_list[index][re.search(r'[0-9]+\.[\s\|]+', proof_list[index]).end():]) \
-                        .group().strip(' ')
-
-                    therefore_match = df.loc[df['proposition'] == therefore]
-
-                    if therefore_match.empty:
-                        raw_therefore, number_of_not = deal_with_not(therefore)
-
-                        str_therefore = '__it is not the case that__ '
-
-                        while number_of_not > 1:
-                            str_therefore += '__it is not the case that__ '
-                            number_of_not -= 1
-
-                        str_therefore += [item.proof for item in raw_therefore.itertuples()][0]
-
-                    else:
-                        str_therefore = [item.proof for item in therefore_match.itertuples()][0]
-
-                else:
-                    raise Exception
-
+                if "Therefore" not in proof_list[index]:
+                    raise ValueError("Malformed disjunction proof")
+                therefore = re.search(
+                    r"([^\w]|\b)([a-z\|\&\>\~\(\)])+",
+                    proof_list[index][re.search(r"[0-9]+\.[\s\|]+", proof_list[index]).end():],
+                ).group().strip(" ")
+                str_therefore = _proof_clause_to_text(therefore)
                 prop_list.append(str_therefore)
-
-                nlp += '__We will get__ ' + str_therefore + ' __by assume either__ ' + clause + ' __or__ ' + \
-                       str_assume2 + '. __Therefore, we have__ ' + str_therefore + '.\n\n'
-
+                nlp += (
+                    "__We will get__ "
+                    + str_therefore
+                    + " __by assume either__ "
+                    + clause
+                    + " __or__ "
+                    + str_assume2
+                    + ". __Therefore, we have__ "
+                    + str_therefore
+                    + ".\n\n"
+                )
             else:
-                raise Exception
-
+                raise ValueError("Unsupported proof form")
         index += 1
 
-    if nlp == '':
-        nlp = '__The claim only supported by itself.__'
-
-    return nlp
+    return nlp or "__The claim only supported by itself.__"
 
 
-def dialogical_graph(extension, arg_number):
-    edges, vertices, node_dict, arg_dict, root_dict = extension.dialogical_explanations(arg_number)
-    g = igraph.Graph()
-    g.add_vertices(vertices)
-    g.add_edges(edges)
-    graph_layout = g.layout('rt', root=[key for key in root_dict])
-    position = {k: graph_layout[k] for k in range(vertices)}
-    Xn = [position[k][0] for k in range(vertices)]
-    Yn = [-position[k][1] for k in range(vertices)]
-    Xe = []
-    Ye = []
-    for E in edges:
-        Xe += [position[E[0]][0], position[E[1]][0], None]
-        Ye += [-position[E[0]][1], -position[E[1]][1], None]
+def _proof_clause_to_text(prop):
+    match = df.loc[df["proposition"] == prop]
+    if not match.empty:
+        return [item.proof for item in match.itertuples()][0]
 
-    node_labels = []
-    hover_labels = []
-    p_o_color = []
-    text_length = 40 if vertices < 20 else 25
+    raw_clause, number_of_not = deal_with_not(prop)
+    text = "__it is not the case that__ " * number_of_not
+    text += [item.proof for item in raw_clause.itertuples()][0]
+    return text
 
-    for k in range(vertices):
 
-        if not arg_dict.get(k):
-            hover_labels.append('We found that in the current situation,<br>' + node_dict.get(k))
-            node_labels.append(node_dict.get(k) if len(node_dict.get(k)) < text_length
-                               else node_dict.get(k)[:text_length - 3] + '...')
-        else:
+GRAPH_CONFIG = {
+    "displaylogo": False,
+    "displayModeBar": True,
+    "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"],
+    "scrollZoom": True,
+    "responsive": True,
+}
 
-            raw_premise, conclusion = re.findall(r'\{(.+)\}\|-(.+)', arg_dict.get(k))[0]
-            premise = raw_premise.split(', ')
 
-            support_text, claim_text = generate_support_claim_text(df, premise, conclusion)
-
-            if len(claim_text) > text_length:
-                node_labels.append(node_dict.get(k)[:1] + ':' + claim_text[:text_length] + '...')
-            else:
-                node_labels.append(node_dict.get(k)[:1] + ':' + claim_text)
-
-            if claim_text.startswith('<b>'):
-                claim_text = claim_text.replace('<b>not that</b>', 'not that')
-
-            if k in root_dict:
-                node_message = 'Proponent first claims that '
-            elif node_dict.get(k).startswith('P'):
-                node_message = 'Proponent defends itself against opponent claiming that '
-            else:
-                node_message = 'Opponent counterattacks proponent claiming that '
-
-            single_hover_label = f"{node_message}<br><b>{claim_text}</b>.<br><br><br>" + \
-                                 f"which is supported by:<br><br>{support_text}"
-
-            if len(single_hover_label) > 1000:
-                single_hover_label = single_hover_label[:1000] + '...'
-
-            hover_labels.append(single_hover_label)
-
-        if node_dict.get(k).startswith('P'):
-            p_o_color.append('#6722B0')
-        elif node_dict.get(k).startswith('O'):
-            p_o_color.append('DarkOrange')
-        else:
-            p_o_color.append('#046E94')
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Scatter(x=Xe,
-                             y=Ye,
-                             mode='lines',
-                             line=dict(color='rgb(210,210,210)', width=1),
-                             hoverinfo='none'
-                             ))
-    fig.add_trace(go.Scatter(x=Xn,
-                             y=Yn,
-                             mode='text',
-                             textfont=dict(size=12, color=p_o_color),
-                             text=node_labels,
-                             hovertext=hover_labels,
-                             hoverlabel=dict(bgcolor=p_o_color),
-                             hoverinfo='text',
-                             ))
-
-    fig.update_layout(annotations=[dict(showarrow=True, arrowhead=2, arrowcolor='#DC2808',
-                                        arrowsize=2, arrowwidth=1, opacity=0.5,
-                                        ax=(position[E[1]][0] * 9 +
-                                            position[E[0]][0]) / 10,
-                                        ay=(-position[E[1]][1] * 9 +
-                                            -position[E[0]][1]) / 10,
-                                        axref='x', ayref='y',
-                                        x=(position[E[0]][0] * 9 +
-                                           position[E[1]][0]) / 10,
-                                        y=(-position[E[0]][1] * 9 +
-                                           -position[E[1]][1]) / 10,
-                                        xref='x', yref='y') for E in edges])
-
-    # axis = dict(showline=True,  # hide axis line, grid, ticklabels and  title
-    #             zeroline=True,
-    #             showgrid=True,
-    #             showticklabels=True,
-    #             range=[min(Xn) * 1.2, max(Xn) * 1.2]
-    #             )
-
-    fig.update_layout(
-        title='hover to see the detail',
-        autosize=True,
-        # legend=dict(font=dict(size=10), orientation="h"),
-        showlegend=False,
-        xaxis=dict(showline=True,
-                   zeroline=True,
-                   showgrid=True,
-                   showticklabels=False,
-                   range=[min(Xn) * 1.2, max(Xn) * 1.2]
-                   ),
-        yaxis=dict(showline=True,
-                   zeroline=True,
-                   showgrid=True,
-                   showticklabels=False
-                   ),
-        margin=dict(l=20, r=20, b=20, t=40),
-        hovermode='closest',
-        plot_bgcolor="#F9F9F9",
-        paper_bgcolor="#F9F9F9",
-
+def legend():
+    items = [
+        ("Grounded", "legend-grounded"),
+        ("Ideal", "legend-ideal"),
+        ("Admissible", "legend-admissible"),
+        ("Not accepted", "legend-not-accepted"),
+        ("attacks", "legend-attack"),
+    ]
+    return html.Div(
+        [
+            html.Span([html.Span(className=f"legend-swatch {css}"), label], className="legend-item")
+            for label, css in items
+        ],
+        className="legend",
     )
 
-    for key in root_dict:
-        tree_text = root_dict[key]
-
-        if tree_text == 'not a dispute tree':
-            tree_text = f'Clicked argument A{arg_number} is <b>not accepted</b> because<br>' \
-                        f'proponent cannot defend itself against opponent.'
-        elif tree_text == 'not admissible':
-            tree_text = f'Clicked argument A{arg_number} is <b>not accepted</b> because<br> ' \
-                        f'an argument is used by both proponent and opponent.'
-        elif tree_text == 'admissible':
-            tree_text = f'Clicked argument A{arg_number} is <b>admissible</b> because<br>' \
-                        f'proponent can defend itself against opponent.'
-        elif tree_text == 'grounded':
-            tree_text = f'Clicked argument A{arg_number} is <b>grounded</b> because<br>' \
-                        f'the debate won\'t last forever.'
-        elif tree_text == 'ideal':
-            tree_text = f'Clicked argument A{arg_number} is <b>ideal</b> because<br>' \
-                        f'either no opponent can counterattack proponent or <br>' \
-                        f'no argument used by opponent is admissible.'
-        elif tree_text == 'grounded,ideal':
-            tree_text = f'Clicked argument A{arg_number} is <b>grounded</b> and <b>ideal</b> because<br>' \
-                        f'(1) the debate won\'t last forever;<br>' \
-                        f'(2) either no opponent can counterattack proponent or<br>' \
-                        f'no argument used by opponent is admissible.'
-        else:
-            tree_text = 'ERROR'
-
-        fig.add_annotation(x=position[key][0],
-                           y=-position[key][1],
-                           text=tree_text,
-                           showarrow=False,
-                           yshift=60,
-                           font=dict(color='rgb(0,0,0)', size=20))
-
-    # fig.show()
-    return fig
-
-
-def argument_graph(extension, separated_form=None, redraw=False):
-    G = nx.DiGraph()
-    for index in extension.arguments:
-        raw_premise, conclusion = re.findall(r'\{(.+)\}\|-(.+)', extension.original_arg[index])[0]
-        premises = raw_premise.split(', ')
-
-        G.add_node(index, supports=premises, claim=conclusion)
-        for another_index in extension.attackee[index]:
-            G.add_edge(index, another_index)
-
-    if redraw:
-        pos = nx.spring_layout(G, k=1)
-    else:
-        pos = nx.kamada_kawai_layout(G)
-
-    max_x = max(pos[key][0] for key in pos)
-    min_x = min(pos[key][0] for key in pos)
-    max_y = max(pos[key][1] for key in pos)
-    min_y = min(pos[key][1] for key in pos)
-
-    for node in G.nodes:
-        G.nodes[node]['pos'] = list(pos[node])
-
-    figure = go.Figure()
-
-    for edge in G.edges:
-        x0, y0 = G.nodes[edge[0]]['pos']
-        x1, y1 = G.nodes[edge[1]]['pos']
-
-        figure.add_trace(go.Scatter(x=tuple([x0, x1, None]), y=tuple([y0, y1, None]), mode='lines', showlegend=False,
-                                    line=dict(width=1.5, color='#888'), hoverinfo='none', opacity=0.2))
-
-        hovertext = "A" + str(edge[0]) + " attacks " + "A" + str(edge[1])
-        figure.add_trace(go.Scatter(x=tuple([(x0 + x1 * 3) / 4]), y=tuple([(y0 + y1 * 3) / 4]),
-                                    hovertext=hovertext, mode='text', showlegend=False,
-                                    hoverlabel=dict(bgcolor='white', font_size=16),
-                                    hoverinfo='text', marker=dict(size=20), opacity=0))
-
-    figure.update_layout(
-        title={
-            'text': "Hover to see the detail",
-            'y': 1.0,
-            'x': 0.5,
-            'xanchor': 'center',
-            'yanchor': 'top'},
-        autosize=True,
-        hovermode='closest',
-        margin=dict(b=20, l=20, r=20, t=60),
-        xaxis=dict(showgrid=True, zeroline=True, showticklabels=False,
-                   range=[min_x * 1.3, max_x * 1.3]),
-        yaxis=dict(showgrid=True, zeroline=True, showticklabels=False,
-                   range=[min_y * 1.3, max_y * 1.3]),
-        height=600,
-        clickmode='event',
-        plot_bgcolor="#F9F9F9",
-        paper_bgcolor="#F9F9F9",
-        annotations=[dict(showarrow=True, arrowhead=2, arrowcolor='#6495ED',
-                          arrowsize=2, arrowwidth=1, opacity=0.5,
-                          ax=(G.nodes[edge[0]]['pos'][0] * 3 +
-                              G.nodes[edge[1]]['pos'][0]) / 4,
-                          ay=(G.nodes[edge[0]]['pos'][1] * 3 +
-                              G.nodes[edge[1]]['pos'][1]) / 4,
-                          axref='x', ayref='y',
-                          x=(G.nodes[edge[1]]['pos'][0] * 3 +
-                             G.nodes[edge[0]]['pos'][0]) / 4,
-                          y=(G.nodes[edge[1]]['pos'][1] * 3 +
-                             G.nodes[edge[0]]['pos'][1]) / 4,
-                          xref='x', yref='y') for edge in G.edges])
 
-    for node in G.nodes:
-        x, y = G.nodes[node]['pos']
-
-        hovertext = 'A' + str(node) + '： ' + separated_form[str(G.nodes[node]['claim'])] + \
-                    ' |- ' + str(G.nodes[node]['claim'])
-
-        support_text, claim_text = generate_support_claim_text(df, G.nodes[node]['supports'], G.nodes[node]['claim'])
-
-        if len(claim_text) >= 40:  # max length of a annotate text is 40
-
-            text = claim_text[:38] + '...'
-
-        else:
-            text = claim_text
-
-        if text.startswith('<b>'):
-            text = text[:3] + text[3].capitalize() + text[4:]
-        else:
-            text = text[0].capitalize() + text[1:]
-
-        if claim_text.startswith('<b>'):
-            claim_text = claim_text.replace('<b>not that</b>', 'not that')
-
-        hovertemplate = f"Argument <b>A{str(node)}</b> claims that<br><b>{claim_text}.</b><br><br><br>" + \
-                        f"which is supported by following (statement or assumption):<br><br>{support_text}"
-
-        size = int(17 + 5 * len(extension.attackee[node]) / len(extension.arguments))  # follow Out-Degrees
-
-        if str(node) == '0':
-            color = '#FBB234'
-        else:
-            color = '#78CD3F'
-
-        figure.add_trace(
-            go.Scatter(x=tuple([x]), y=tuple([y]), text=tuple([text]), hovertext=tuple([hovertext]),
-                       hovertemplate=tuple([hovertemplate]),
-                       hoverinfo='text', mode='text', textposition='middle center',
-                       hoverlabel=dict(bgcolor=color, font_size=16),
-                       name='A' + str(node),
-                       showlegend=False,
-                       textfont=dict(size=size, color=color)
-                       ))
-
-    return figure
-
-
-def generate_support_claim_text(dataframe, supports_list, claim_str=None):
-    support_text = ''
-
-    for prop in supports_list:
-        support = dataframe.loc[dataframe['proposition'] == str(prop)]
-
-        single_text = [item.proof for item in support.itertuples()][0]
-
-        if [item.type for item in support.itertuples()][0].startswith('statement'):
-            if [item.speaker for item in support.itertuples()][0].startswith('D'):
-                support_type = '<b>Trump\'s statement</b>'
-            else:
-                support_type = '<b>Biden\'s statement</b>'
-        else:
-            support_type = '<b>assumption</b>'
-
-        support_text += support_type + ': ' + single_text[0].capitalize() + single_text[1:] + '.<br><br>'
-
-    if claim_str:
-        claim = dataframe.loc[dataframe['proposition'] == str(claim_str)]
-
-        if claim.empty:
-            claim, number_of_not = deal_with_not(str(claim_str))
-
-            claim_text = '<b>not that</b> '
-
-            while number_of_not > 1:
-                claim_text += '<b>not that</b> '
-                number_of_not -= 1
-
-            claim_text += [item.proof for item in claim.itertuples()][0]
-
-        else:
-            claim_text = [item.proof for item in claim.itertuples()][0]
-
-        return support_text.strip('<br><br>'), claim_text
-
-    else:
-        return support_text.strip('<br><br>')
-
-
-def wrap_text(original_text, character_per_line, how_many_line):
-    output_text = ''
-    line_number = 1
-    index = 0
-
-    while line_number <= how_many_line:
-
-        if len(original_text) >= line_number * character_per_line + index:
-
-            output_text += original_text[((line_number - 1) * character_per_line + index):
-                                         (line_number * character_per_line + index)]
-
-            while original_text[line_number * character_per_line + index] != ' ':
-                output_text += original_text[line_number * character_per_line + index]
-                index += 1
-                if len(original_text) <= how_many_line * character_per_line + index:
-                    break
-
-            output_text += '<br>'
-        else:
-            output_text += original_text[((line_number - 1) * character_per_line + index):]
-
-        line_number += 1
-
-    if len(original_text) >= how_many_line * character_per_line + index:
-        output_text += '...'
-
-    return output_text
-
-
-page2_layout = html.Div([
-
-    dcc.Link('Go back to visualization', href='/'),
-    html.Br(),
-    html.H5(title.values[0][0]),
-    dash_table.DataTable(
-        id='table',
-        columns=[{"name": i, "id": i} for i in df.columns],
-        data=df.to_dict('records'),
-        style_cell={
-            'textAlign': 'left',
-            'whiteSpace': 'normal',
-            'height': 'auto',
-        },
-    ),
-    html.H6('Description'),
-
-    dcc.Markdown(
-        '''
-    * number: The serial number of each passage.\
-
-        * C stands for conclusion.
-        * N stands for norm.
-        * T stands for Trump's speech.
-        * B stands for Biden's speech.\
-
-    * origin: the origin speech passage extracted from the debate transcript.\
-
-    * speaker: who the passage related to.\
-
-    * type: indicates the type of each passage.\
-
-        * statement: a passage extracted from the original speech.\
-
-        * conclusion: statement that can be treated as a conclusion of the whole speech.\
-
-            * Conclusion that is not in the original speech but given implicitly has (hidden) mark.\
-
-        * norm()[]: also called unexpressed premises, added accordingly in order to
-                       transform __enthymematic__ proof into __syllogistic__ proof.\
-
-            * Within the () can be strict or defeasible. Strict means that this norm are treated as truth,
-                   therefore cannot be attacked. Defeasible means this norm can be attacked.\
-
-            * Within the [] is the statement the norm corresponding to.\
-
-    * proof: a summary of the original speech passage that shown in the detail and proof.\
-
-    * proposition: act as a code of the passage to go through the proof machinery.\
-
-    * group: indicates which group the passage belongs to.\
-
-        * Each group is named after the proposition of one of the conclusions.\
-
-        * In this knowledge base, conclusion = {c, p, a, b, ~b, ~c} and group = {c, p, a, b}.\
-
-        * Note that b and ~b as well as c and ~c are in the same group for they attack each other.\
-    '''
-    ),
-
-])
-
-
-@app.callback(dash.dependencies.Output('page-content', 'children'),
-              [dash.dependencies.Input('url', 'pathname')])
+page1_layout = html.Div(
+    [
+        dcc.Store(id="extension"),
+        html.Header(
+            [
+                html.Div(
+                    [
+                        html.P("NDSA · structured argumentation", className="eyebrow"),
+                        html.H1("See the reasoning inside a debate"),
+                        html.P(
+                            "A stable argument map of claims, attacks, dispute trees, and formal derivations.",
+                            className="lede",
+                        ),
+                    ]
+                ),
+                dcc.Link("Knowledge base", href="/use-case", className="secondary-link"),
+            ],
+            className="app-header",
+        ),
+        html.Main(
+            [
+                html.Section(
+                    [
+                        html.Div(
+                            [
+                                html.Label("Focus claim", htmlFor="candidate-dropdown", className="control-label"),
+                                dcc.Dropdown(
+                                    id="candidate-dropdown",
+                                    placeholder="Select a claim",
+                                    options=update_options(),
+                                    optionHeight=72,
+                                    multi=False,
+                                    value="~a>~d",
+                                    className="claim-select",
+                                    clearable=False,
+                                ),
+                            ],
+                            className="control-block",
+                        ),
+                        html.Div(
+                            [
+                                html.P("Debate", className="meta-label"),
+                                html.P("Biden vs. Trump · second 2020 presidential debate", className="meta-value"),
+                                html.P(title.values[0][0], className="meta-question"),
+                            ],
+                            className="debate-meta",
+                        ),
+                    ],
+                    className="control-card",
+                ),
+                html.Section(
+                    [
+                        html.Div(
+                            [
+                                html.Div(
+                                    [
+                                        html.P("01", className="section-index"),
+                                        html.Div(
+                                            [
+                                                html.H2("Argument map"),
+                                                html.P(
+                                                    "Fixed layered positions: focal argument → attackers → counter-attackers. Red arrows point from attacker to target.",
+                                                    className="section-copy",
+                                                ),
+                                            ]
+                                        ),
+                                    ],
+                                    className="section-title-row",
+                                ),
+                                legend(),
+                            ],
+                            className="section-heading",
+                        ),
+                        dcc.Loading(
+                            type="circle",
+                            children=dcc.Graph(id="main-graph", config=GRAPH_CONFIG, className="graph"),
+                        ),
+                    ],
+                    className="panel",
+                ),
+                html.Section(
+                    [
+                        html.Div(
+                            [
+                                html.P("02", className="section-index"),
+                                html.Div(
+                                    [
+                                        html.H2("Selected argument"),
+                                        html.P(
+                                            "Equivalent states at the same depth are shared across paths; selection changes explanation, not graph geometry.",
+                                            className="section-copy",
+                                        ),
+                                    ]
+                                ),
+                            ],
+                            className="section-title-row",
+                        ),
+                        html.Div(id="argument-detail", className="argument-detail"),
+                        html.Div(id="dialogical-status", className="tree-status"),
+                        dcc.Loading(
+                            type="circle",
+                            children=dcc.Graph(id="dialogical", config=GRAPH_CONFIG, className="graph"),
+                        ),
+                    ],
+                    className="panel",
+                ),
+                html.Section(
+                    [
+                        html.Div(
+                            [
+                                html.P("03", className="section-index"),
+                                html.Div(
+                                    [
+                                        html.H2("Derivation"),
+                                        html.P(
+                                            "The first minimal premise set is shown automatically; choose another set when alternatives exist.",
+                                            className="section-copy",
+                                        ),
+                                    ]
+                                ),
+                            ],
+                            className="section-title-row",
+                        ),
+                        html.Div(
+                            [
+                                html.Div(
+                                    [
+                                        html.Label("Premise set", htmlFor="premises-dropdown", className="control-label"),
+                                        dcc.Dropdown(
+                                            id="premises-dropdown",
+                                            placeholder="Select a premise set",
+                                            multi=False,
+                                            className="claim-select",
+                                        ),
+                                        html.Div(
+                                            [
+                                                html.P("Premises", className="meta-label"),
+                                                html.Pre(id="selected-premises", className="proof-box"),
+                                                html.P("Claim", className="meta-label"),
+                                                html.Pre(id="claim", className="proof-box"),
+                                            ],
+                                            className="proof-inputs",
+                                        ),
+                                    ],
+                                    className="proof-column",
+                                ),
+                                html.Div(
+                                    [
+                                        html.P("Natural-language proof", className="meta-label"),
+                                        html.Div(id="NLP", className="nlp-output"),
+                                    ],
+                                    className="proof-column",
+                                ),
+                            ],
+                            className="proof-grid",
+                        ),
+                    ],
+                    className="panel",
+                ),
+            ],
+            className="page-shell",
+        ),
+    ]
+)
+
+page2_layout = html.Div(
+    [
+        html.Header(
+            [
+                html.Div(
+                    [
+                        html.P("NDSA · source model", className="eyebrow"),
+                        html.H1("Knowledge base"),
+                        html.P(title.values[0][0], className="lede"),
+                    ]
+                ),
+                dcc.Link("Back to visualization", href="/", className="secondary-link"),
+            ],
+            className="app-header",
+        ),
+        html.Main(
+            [
+                html.Section(
+                    [
+                        dash_table.DataTable(
+                            id="table",
+                            columns=[{"name": i, "id": i} for i in df.columns],
+                            data=df.to_dict("records"),
+                            page_size=20,
+                            sort_action="native",
+                            filter_action="native",
+                            style_table={"overflowX": "auto"},
+                            style_cell={
+                                "textAlign": "left",
+                                "whiteSpace": "normal",
+                                "height": "auto",
+                                "fontFamily": "Inter, ui-sans-serif, system-ui, sans-serif",
+                                "fontSize": 13,
+                                "padding": "10px",
+                                "maxWidth": 320,
+                            },
+                            style_header={"fontWeight": 700, "backgroundColor": "#f2f4f7"},
+                        ),
+                    ],
+                    className="panel",
+                ),
+                html.Section(
+                    [
+                        html.H2("Field guide"),
+                        dcc.Markdown(
+                            """
+- **number** — source passage identifier. `T` = Trump, `B` = Biden, `C` = conclusion, `N` = norm.
+- **origin** — original debate passage.
+- **speaker** — participant associated with the passage.
+- **type** — statement, conclusion, or strict/defeasible unexpressed premise.
+- **proof** — shortened natural-language form used in explanations.
+- **proposition** — symbolic representation used by the proof machinery.
+- **group** — argument family used to bound the search space.
+                            """
+                        ),
+                    ],
+                    className="panel prose-panel",
+                ),
+            ],
+            className="page-shell",
+        ),
+    ]
+)
+
+
+@app.callback(
+    [
+        dash.dependencies.Output("main-graph", "figure"),
+        dash.dependencies.Output("extension", "data"),
+        dash.dependencies.Output("main-graph", "clickData"),
+    ],
+    [dash.dependencies.Input("candidate-dropdown", "value")],
+)
+def main_work(claim):
+    if not claim:
+        raise dash.exceptions.PreventUpdate
+
+    extension, separated_premises = load_argument_state(claim)
+    payload = {
+        "extension": _serialize_extension(extension),
+        "premises": separated_premises,
+    }
+    return argument_graph(extension), payload, None
+
+
+@app.callback(
+    [
+        dash.dependencies.Output("dialogical", "figure"),
+        dash.dependencies.Output("premises-dropdown", "options"),
+        dash.dependencies.Output("premises-dropdown", "value"),
+        dash.dependencies.Output("argument-detail", "children"),
+        dash.dependencies.Output("dialogical-status", "children"),
+    ],
+    [
+        dash.dependencies.Input("extension", "data"),
+        dash.dependencies.Input("main-graph", "clickData"),
+    ],
+)
+def after_click(payload, argument):
+    if not payload:
+        raise dash.exceptions.PreventUpdate
+
+    extension = _restore_extension(payload["extension"])
+    arg_number = 0
+    if argument and argument.get("points"):
+        custom_data = argument["points"][0].get("customdata")
+        if custom_data:
+            arg_number = int(custom_data[0])
+
+    if arg_number not in extension.arguments:
+        arg_number = 0
+
+    _, conclusion, _, claim_text = _argument_data(extension, arg_number)
+    figure, statuses = dialogical_graph(extension, arg_number)
+    options = build_premise_options(payload.get("premises", {}), conclusion, claim_text)
+    selected_option = options[0]["value"] if options else None
+    status_children = [html.Span(status, className="tree-status-pill") for status in statuses]
+    return figure, options, selected_option, build_argument_detail(extension, arg_number), status_children
+
+
+@app.callback(
+    [
+        dash.dependencies.Output("selected-premises", "children"),
+        dash.dependencies.Output("claim", "children"),
+        dash.dependencies.Output("NLP", "children"),
+    ],
+    [dash.dependencies.Input("premises-dropdown", "value")],
+)
+def after_choose_premises(raw_value):
+    if not raw_value:
+        return "", "", html.P("Select a premise set to generate the derivation.", className="muted")
+
+    selected = json.loads(raw_value)
+    premises = selected["premises"]
+    conclusion = selected["conclusion"]
+
+    with redirect_stdout(io.StringIO()):
+        proof = NaturalDeduction(premises, conclusion).prove()
+
+    nlp = natural_language_transform(proof)
+    return selected["premises_text"], selected["claim_text"], dcc.Markdown(nlp)
+
+
+@app.callback(
+    dash.dependencies.Output("page-content", "children"),
+    [dash.dependencies.Input("url", "pathname")],
+)
 def display_page(pathname):
-    if pathname == '/use-case':
-        return page2_layout
-    else:
-        return page1_layout
+    return page2_layout if pathname == "/use-case" else page1_layout
+
+
+app.layout = html.Div([dcc.Location(id="url", refresh=False), html.Div(id="page-content")])
 
 
 if __name__ == "__main__":
-    # app.run_server(debug=True)
     app.run_server(debug=False)
