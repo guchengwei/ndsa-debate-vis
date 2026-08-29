@@ -26,6 +26,12 @@ def test_extension_round_trip_preserves_argument_state():
     assert restored.ideal == extension.ideal
 
 
+def test_argument_statuses_preserve_grounded_and_ideal_overlap():
+    extension, _ = ndsa.load_argument_state("e")
+
+    assert ndsa.argument_statuses(extension, 0) == ["grounded", "ideal"]
+
+
 @pytest.mark.parametrize("claim", selectable_claims())
 def test_every_selectable_claim_renders_a_stable_argument_map(claim):
     extension, separated_premises = ndsa.load_argument_state(claim)
@@ -47,6 +53,22 @@ def test_every_selectable_claim_renders_a_stable_argument_map(claim):
     assert payload["layout"]["dragmode"] == "pan"
     assert payload["layout"]["xaxis"]["visible"] is False
     assert payload["layout"]["yaxis"]["visible"] is False
+
+
+def test_default_dispute_graph_collapses_equivalent_states():
+    extension, _ = ndsa.load_argument_state("~a>~d")
+    edges, vertices, node_dict, arg_dict, root_dict = extension.dialogical_explanations(0)
+
+    collapsed = ndsa._collapse_dialogical_explanation(
+        edges, vertices, node_dict, arg_dict, root_dict
+    )
+    collapsed_edges, collapsed_nodes, _, collapsed_roots, counts, layers = collapsed
+
+    assert len(collapsed_nodes) < vertices
+    assert any(count > 1 for count in counts.values())
+    assert len(layers) == len(collapsed_nodes)
+    assert collapsed_roots
+    assert collapsed_edges
 
 
 def test_default_argument_opens_dialogical_explanation():
