@@ -518,6 +518,16 @@ a {
     border-radius: 14px;
   }
 
+  .graph {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .graph .js-plotly-plot {
+    min-width: 900px;
+  }
+
   .section-title-row {
     gap: 7px;
   }

@@ -7,12 +7,20 @@ ARTIFACT_DIR = Path("artifacts")
 ARTIFACT_DIR.mkdir(exist_ok=True)
 
 
+def assert_no_page_overflow(page, label):
+    overflow = page.evaluate(
+        "document.documentElement.scrollWidth - document.documentElement.clientWidth"
+    )
+    if overflow > 2:
+        raise AssertionError(f"Unexpected horizontal page overflow on {label}: {overflow}px")
+
+
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch()
-    page = browser.new_page(viewport={"width": 1440, "height": 1100})
     page_errors = []
     console_errors = []
 
+    page = browser.new_page(viewport={"width": 1440, "height": 1100})
     page.on("pageerror", lambda error: page_errors.append(str(error)))
     page.on(
         "console",
@@ -60,6 +68,7 @@ with sync_playwright() as playwright:
     if main_plot.bounding_box() is None or dialogical_plot.bounding_box() is None:
         raise AssertionError("Expected both Plotly visualizations to have rendered dimensions")
 
+    assert_no_page_overflow(page, "desktop visualization")
     page.screenshot(path=str(ARTIFACT_DIR / "home.png"), full_page=True)
 
     page.goto("http://127.0.0.1:8050/use-case", wait_until="networkidle", timeout=60_000)
@@ -81,7 +90,40 @@ with sync_playwright() as playwright:
     if any(position < 0 for position in positions) or positions != sorted(positions):
         raise AssertionError(f"Unexpected knowledge-base column order: {headers!r}")
 
+    assert_no_page_overflow(page, "desktop knowledge base")
     page.screenshot(path=str(ARTIFACT_DIR / "knowledge-base.png"), full_page=True)
+
+    mobile = browser.new_page(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+    mobile.on("pageerror", lambda error: page_errors.append(f"mobile: {error}"))
+    mobile.on(
+        "console",
+        lambda message: console_errors.append(f"mobile: {message.text}")
+        if message.type == "error"
+        else None,
+    )
+
+    mobile.goto("http://127.0.0.1:8050", wait_until="networkidle", timeout=60_000)
+    mobile.wait_for_selector("#main-graph .js-plotly-plot", timeout=30_000)
+    mobile.wait_for_selector("#dialogical .js-plotly-plot", timeout=30_000)
+    mobile.wait_for_function(
+        "['main-graph', 'dialogical'].every(id => document.getElementById(id)?.scrollLeft > 0)",
+        timeout=30_000,
+    )
+    assert_no_page_overflow(mobile, "mobile visualization")
+    for graph_id in ["main-graph", "dialogical"]:
+        plot_width = mobile.locator(f"#{graph_id} .js-plotly-plot").bounding_box()["width"]
+        if plot_width < 850:
+            raise AssertionError(f"Expected readable mobile canvas for {graph_id}, got {plot_width}px")
+        scroll_left = mobile.locator(f"#{graph_id}").evaluate("element => element.scrollLeft")
+        if scroll_left <= 0:
+            raise AssertionError(f"Expected {graph_id} to start centered on mobile")
+    mobile.screenshot(path=str(ARTIFACT_DIR / "mobile-home.png"), full_page=True)
+
+    mobile.goto("http://127.0.0.1:8050/use-case", wait_until="networkidle", timeout=60_000)
+    mobile.wait_for_selector("#table", state="visible", timeout=30_000)
+    assert_no_page_overflow(mobile, "mobile knowledge base")
+    mobile.screenshot(path=str(ARTIFACT_DIR / "mobile-knowledge-base.png"), full_page=True)
+
     (ARTIFACT_DIR / "browser-console.txt").write_text(
         "PAGE ERRORS\n"
         + "\n".join(page_errors)
