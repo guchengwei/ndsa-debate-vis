@@ -61,6 +61,27 @@ with sync_playwright() as playwright:
         raise AssertionError("Expected both Plotly visualizations to have rendered dimensions")
 
     page.screenshot(path=str(ARTIFACT_DIR / "home.png"), full_page=True)
+
+    page.goto("http://127.0.0.1:8050/use-case", wait_until="networkidle", timeout=60_000)
+    page.wait_for_selector("#table", state="visible", timeout=30_000)
+    source_text = page.locator("body").inner_text()
+    for expected in [
+        "From debate passage to proposition",
+        "Source rows",
+        "Read left to right",
+        "Filter any column",
+    ]:
+        if expected not in source_text:
+            raise AssertionError(f"Missing knowledge-base guidance: {expected!r}")
+
+    headers = page.locator("#table th").all_inner_texts()
+    header_text = " ".join(headers)
+    expected_order = ["number", "speaker", "type", "proof", "proposition", "origin", "group"]
+    positions = [header_text.find(column) for column in expected_order]
+    if any(position < 0 for position in positions) or positions != sorted(positions):
+        raise AssertionError(f"Unexpected knowledge-base column order: {headers!r}")
+
+    page.screenshot(path=str(ARTIFACT_DIR / "knowledge-base.png"), full_page=True)
     (ARTIFACT_DIR / "browser-console.txt").write_text(
         "PAGE ERRORS\n"
         + "\n".join(page_errors)
