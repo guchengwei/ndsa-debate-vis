@@ -28,18 +28,26 @@ attacker ─────→ attacked argument
 
 This makes depth meaningful and removes physics-based motion.
 
-Argument cards expose semantic status directly:
-
-- Grounded
-- Ideal
-- Admissible
-- Not accepted
+Argument semantics are not treated as mutually exclusive. An argument may be both **Grounded** and **Ideal**; the detail view preserves both labels. **Admissible** is shown when neither stronger status applies, and otherwise the argument is shown as **Not accepted**.
 
 Clicking a card changes the explanation panel but does not change map geometry.
 
 ## Dialogical explanation
 
-The dispute tree remains a tree layout, but proponent, opponent, and terminal states are rendered as distinct cards. Acceptance results are shown as explicit status pills instead of large annotations placed inside the plot.
+The reasoning engine still generates dispute trees. The visualization then performs a presentation-only reduction before layout:
+
+- each generated dispute tree remains a separate component;
+- equivalent states are merged only when they occur at the same depth in the same component;
+- multiple incoming paths are preserved;
+- equivalent states at different depths are not merged.
+
+The displayed result is therefore a layered **DAG view of the generated dispute tree**, not a change to the underlying argumentation algorithm. Shared states are marked with the number of equivalent paths they represent.
+
+Proponent, opponent, and terminal states remain visually distinct, and acceptance results are shown as explicit status pills instead of annotations floating inside the graph.
+
+## Derivation
+
+Selecting an argument also exposes its minimal premise sets. When premise sets exist, the first one is selected automatically so the natural-deduction explanation is immediately visible. Other premise sets remain selectable when alternatives exist.
 
 ## Repository survey
 
@@ -110,6 +118,17 @@ ELK's layered layout is conceptually a very good match for argument graphs. The 
 
 Reconsider ELK if future graphs require ports, compound nodes, or more advanced edge routing.
 
+## Validation strategy
+
+The repository now has CI for both data/figure behavior and browser rendering:
+
+- every selectable claim is rendered twice and checked for deterministic argument-map positions;
+- extension serialization is round-tripped;
+- overlapping Grounded/Ideal semantics are covered by a regression test;
+- the default dispute explanation is checked to ensure equivalent states are actually collapsed;
+- a real Dash server is opened in Chromium and both Plotly views, selected argument detail, and default derivation must render without page or console errors;
+- the browser run uploads a full-page screenshot and logs for visual inspection.
+
 ## Deliberate non-goals
 
 This pass does not:
@@ -118,6 +137,7 @@ This pass does not:
 - animate layout changes;
 - migrate the Python application to React;
 - change the argumentation engine;
-- change the underlying debate knowledge base.
+- change the underlying debate knowledge base;
+- combine the visualization redesign with a Dash/Plotly major-version migration.
 
 Those are separate architectural decisions and should not be coupled to visual modernization.
