@@ -35,10 +35,25 @@ with sync_playwright() as playwright:
     detail = page.locator("#argument-detail").inner_text()
     if "A0" not in detail:
         raise AssertionError(f"Expected default A0 detail, got: {detail!r}")
+    if "Admissible:" not in detail:
+        raise AssertionError(f"Expected the selected status to be explained, got: {detail!r}")
+
+    body_text = page.locator("body").inner_text()
+    expected_guidance = [
+        "Red arrows run from an attacking argument to the argument it challenges.",
+        "Green nodes defend the selected argument; orange nodes attack it.",
+    ]
+    for guidance in expected_guidance:
+        if guidance not in body_text:
+            raise AssertionError(f"Missing first-time guidance: {guidance!r}")
+    if "Equivalent states at the same depth" in body_text:
+        raise AssertionError("Internal graph-collapse wording should not be first-time UI copy")
 
     proof_text = page.locator("#NLP").inner_text().strip()
     if "Select a premise set" in proof_text:
         raise AssertionError("Expected the first premise set to render automatically")
+    if "only supported by itself" in proof_text:
+        raise AssertionError("Expected the self-premise explanation to use clearer wording")
 
     main_plot = page.locator("#main-graph .js-plotly-plot")
     dialogical_plot = page.locator("#dialogical .js-plotly-plot")
