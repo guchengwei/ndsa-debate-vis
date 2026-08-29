@@ -82,23 +82,24 @@ with sync_playwright() as playwright:
     if "A1" not in page.locator("#argument-detail").inner_text():
         raise AssertionError("Expected clicking the second argument to select A1")
 
-    dropdown = page.locator("#candidate-dropdown")
-    selected_claim = dropdown.inner_text().strip()
-    dropdown_input = dropdown.locator("input")
-    if dropdown_input.count() == 0:
-        raise AssertionError("Expected the focus-claim dropdown to expose a keyboard input")
-    dropdown_input.click()
-    dropdown_input.press("ArrowDown")
-    dropdown_input.press("ArrowDown")
-    dropdown_input.press("Enter")
+    dropdown_button = page.locator("#candidate-dropdown button")
+    if dropdown_button.count() == 0:
+        raise AssertionError("Expected the focus-claim dropdown to expose its Dash button")
+    selected_claim = dropdown_button.first.inner_text().strip()
+    dropdown_button.first.click()
+    page.wait_for_selector(".dash-dropdown-options .dash-dropdown-option", timeout=30_000)
+    options = page.locator(".dash-dropdown-options .dash-dropdown-option")
+    if options.count() < 2:
+        raise AssertionError("Expected multiple focus-claim options")
+    options.nth(1).click()
     page.wait_for_function(
-        "previous => document.getElementById('candidate-dropdown')?.innerText.trim() !== previous",
+        "previous => document.querySelector('#candidate-dropdown button')?.innerText.trim() !== previous",
         arg=selected_claim,
         timeout=30_000,
     )
-    updated_claim = dropdown.inner_text().strip()
+    updated_claim = dropdown_button.first.inner_text().strip()
     if not updated_claim or updated_claim == selected_claim:
-        raise AssertionError("Expected keyboard selection to change the focus claim")
+        raise AssertionError("Expected selecting another option to change the focus claim")
     page.wait_for_function(
         "document.querySelector('#argument-detail')?.innerText.includes('A0')",
         timeout=30_000,
