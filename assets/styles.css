@@ -518,12 +518,13 @@ a {
     border-radius: 14px;
   }
 
-  .panel {
+  .graph {
     overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
   }
 
-  .panel .graph {
+  .graph .js-plotly-plot {
     min-width: 900px;
   }
 
