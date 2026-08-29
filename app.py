@@ -17,4 +17,4 @@ from dashboard import (
 app = server
 
 if __name__ == "__main__":
-    dash_app.run_server(debug=False)
+    dash_app.run(debug=False)
