@@ -40,6 +40,13 @@ STATUS_STYLE = {
     "not accepted": {"fill": "#f2f4f7", "border": "#667085", "label": "Not accepted"},
 }
 
+STATUS_HELP = {
+    "grounded": "Grounded: accepted even under the framework's most cautious semantics.",
+    "ideal": "Ideal: accepted while avoiding positions opposed by an admissible counter-position.",
+    "admissible": "Admissible: the argument can be defended consistently against its attackers.",
+    "not accepted": "Not accepted: the argument is not selected by the computed acceptance semantics.",
+}
+
 TREE_STATUS_COPY = {
     "not a dispute tree": "Not accepted — the proponent cannot defend against an opponent.",
     "not admissible": "Not admissible — an argument is used by both sides.",
@@ -483,9 +490,8 @@ def dialogical_graph(extension, arg_number):
 
 
 def build_argument_detail(extension, arg_number):
-    premises, conclusion, _, claim_text = _argument_data(extension, arg_number)
+    _, _, _, claim_text = _argument_data(extension, arg_number)
     statuses = argument_statuses(extension, arg_number)
-    premise_count = len(premises)
     status_children = [
         html.Span(
             STATUS_STYLE[status]["label"],
@@ -493,6 +499,7 @@ def build_argument_detail(extension, arg_number):
         )
         for status in statuses
     ]
+    status_summary = " ".join(STATUS_HELP[status] for status in statuses)
     return html.Div(
         [
             html.Div(
@@ -501,7 +508,7 @@ def build_argument_detail(extension, arg_number):
             ),
             html.H3(strip_markup(claim_text), className="argument-detail-claim"),
             html.P(
-                f"{premise_count} premise{'s' if premise_count != 1 else ''} · click another map card to inspect it",
+                f"{status_summary} Click another argument in the map to compare its defence and derivation.",
                 className="muted",
             ),
         ]
@@ -676,7 +683,7 @@ def natural_language_transform(proof):
                 raise ValueError("Unsupported proof form")
         index += 1
 
-    return nlp or "__The claim only supported by itself.__"
+    return nlp or "__No additional inference is needed: this argument takes the selected claim directly as a premise.__"
 
 
 def _proof_clause_to_text(prop):
@@ -726,7 +733,7 @@ page1_layout = html.Div(
                         html.P("NDSA · structured argumentation", className="eyebrow"),
                         html.H1("See the reasoning inside a debate"),
                         html.P(
-                            "A stable argument map of claims, attacks, dispute trees, and formal derivations.",
+                            "Choose a claim, follow its attacks and counter-attacks, then inspect why an argument is accepted and how it is derived.",
                             className="lede",
                         ),
                     ]
@@ -777,7 +784,7 @@ page1_layout = html.Div(
                                             [
                                                 html.H2("Argument map"),
                                                 html.P(
-                                                    "Fixed layered positions: focal argument → attackers → counter-attackers. Red arrows point from attacker to target.",
+                                                    "Start at A0. Red arrows run from an attacking argument to the argument it challenges. Click any card to inspect its defence and derivation.",
                                                     className="section-copy",
                                                 ),
                                             ]
@@ -803,9 +810,9 @@ page1_layout = html.Div(
                                 html.P("02", className="section-index"),
                                 html.Div(
                                     [
-                                        html.H2("Selected argument"),
+                                        html.H2("Defence paths"),
                                         html.P(
-                                            "Equivalent states at the same depth are shared across paths; selection changes explanation, not graph geometry.",
+                                            "Green nodes defend the selected argument; orange nodes attack it. Repeated states are merged and marked ×N so the same move is not drawn many times.",
                                             className="section-copy",
                                         ),
                                     ]
@@ -831,7 +838,7 @@ page1_layout = html.Div(
                                     [
                                         html.H2("Derivation"),
                                         html.P(
-                                            "The first minimal premise set is shown automatically; choose another set when alternatives exist.",
+                                            "A premise set is one minimal route from source statements or assumptions to the selected claim. The first route is shown automatically.",
                                             className="section-copy",
                                         ),
                                     ]
