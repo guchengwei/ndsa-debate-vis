@@ -7,7 +7,7 @@ NDSA Debate Visualization is a research prototype for exploring conflicting clai
 The proposed system turns a propositional-logic knowledge base into several complementary explanations:
 
 - an **argument relation graph** showing arguments and attack relations;
-- a **dialogical explanation** represented as a dispute tree;
+- a **dialogical explanation** generated from dispute trees;
 - a **logical explanation** that derives a claim from its premises using natural deduction;
 - a **natural-language explanation** of the proof.
 
@@ -27,7 +27,7 @@ The thesis evaluates the method with a fragment of the second 2020 U.S. presiden
 
 The application uses a **deterministic layered argument map** rather than a force-directed graph. The focused argument is placed first, attackers are placed on the next layer, and counter-attackers continue outward. Red arrows retain the actual attack direction.
 
-The layout is static, but inspection remains interactive: users can pan/zoom, select an argument, inspect its dispute tree, and open the associated natural-deduction explanation without causing graph positions to move.
+The layout is static, but inspection remains interactive: users can pan/zoom, select an argument, inspect a reduced DAG view of its generated dispute-tree paths, and open the associated natural-deduction explanation without causing graph positions to move.
 
 The redesign deliberately reuses the existing Python/Plotly/igraph stack instead of adding a React graph editor. See [`docs/visualization-design.md`](docs/visualization-design.md) for the design rationale and a comparison with Argdown, Debate Map, OVA3, React Flow, G6, and ELK.
 
@@ -43,7 +43,7 @@ The redesign deliberately reuses the existing Python/Plotly/igraph stack instead
 │   ├── nd_lookups.py
 │   ├── nd_rules.py
 │   └── tableaux.py
-├── assets/                 Dash styles and client-side helpers
+├── assets/                 Responsive Dash styles
 ├── data/                   Debate knowledge base and cached intermediate data
 └── docs/                   Static introduction and visualization design notes
 ```
