@@ -23,10 +23,22 @@ with sync_playwright() as playwright:
     page.wait_for_selector("#main-graph .js-plotly-plot", timeout=30_000)
     page.wait_for_selector("#dialogical .js-plotly-plot", timeout=30_000)
     page.wait_for_selector("#argument-detail", state="visible", timeout=30_000)
+    page.wait_for_function(
+        "document.querySelector('#selected-premises')?.innerText.trim().length > 0",
+        timeout=30_000,
+    )
+    page.wait_for_function(
+        "document.querySelector('#NLP')?.innerText.trim().length > 0",
+        timeout=30_000,
+    )
 
     detail = page.locator("#argument-detail").inner_text()
     if "A0" not in detail:
         raise AssertionError(f"Expected default A0 detail, got: {detail!r}")
+
+    proof_text = page.locator("#NLP").inner_text().strip()
+    if "Select a premise set" in proof_text:
+        raise AssertionError("Expected the first premise set to render automatically")
 
     main_plot = page.locator("#main-graph .js-plotly-plot")
     dialogical_plot = page.locator("#dialogical .js-plotly-plot")
