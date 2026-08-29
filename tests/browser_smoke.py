@@ -71,6 +71,42 @@ with sync_playwright() as playwright:
     assert_no_page_overflow(page, "desktop visualization")
     page.screenshot(path=str(ARTIFACT_DIR / "home.png"), full_page=True)
 
+    points = page.locator("#main-graph .scatterlayer .point")
+    if points.count() < 2:
+        raise AssertionError("Expected multiple selectable argument hit targets")
+    points.nth(1).click(force=True)
+    page.wait_for_function(
+        "document.querySelector('#argument-detail')?.innerText.includes('A1')",
+        timeout=30_000,
+    )
+    if "A1" not in page.locator("#argument-detail").inner_text():
+        raise AssertionError("Expected clicking the second argument to select A1")
+
+    dropdown = page.locator("#candidate-dropdown")
+    selected_claim = dropdown.inner_text().strip()
+    dropdown.click()
+    page.wait_for_selector(".dash-dropdown-options .dash-dropdown-option", timeout=30_000)
+    options = page.locator(".dash-dropdown-options .dash-dropdown-option")
+    if options.count() < 2:
+        raise AssertionError("Expected multiple focus-claim options")
+    options.nth(1).click()
+    page.wait_for_function(
+        "previous => document.getElementById('candidate-dropdown')?.innerText.trim() !== previous",
+        arg=selected_claim,
+        timeout=30_000,
+    )
+    updated_claim = dropdown.inner_text().strip()
+    if not updated_claim or updated_claim == selected_claim:
+        raise AssertionError("Expected selecting another option to change the focus claim")
+    page.wait_for_function(
+        "document.querySelector('#argument-detail')?.innerText.includes('A0')",
+        timeout=30_000,
+    )
+    page.wait_for_function(
+        "document.querySelector('#NLP')?.innerText.trim().length > 0",
+        timeout=30_000,
+    )
+
     page.goto("http://127.0.0.1:8050/use-case", wait_until="networkidle", timeout=60_000)
     page.wait_for_selector("#table", state="visible", timeout=30_000)
     source_text = page.locator("body").inner_text()
