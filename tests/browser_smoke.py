@@ -106,6 +106,10 @@ with sync_playwright() as playwright:
     mobile.wait_for_selector("#main-graph .js-plotly-plot", timeout=30_000)
     mobile.wait_for_selector("#dialogical .js-plotly-plot", timeout=30_000)
     assert_no_page_overflow(mobile, "mobile visualization")
+    for graph_id in ["main-graph", "dialogical"]:
+        width = mobile.locator(f"#{graph_id}").bounding_box()["width"]
+        if width < 850:
+            raise AssertionError(f"Expected readable mobile canvas for {graph_id}, got {width}px")
     mobile.screenshot(path=str(ARTIFACT_DIR / "mobile-home.png"), full_page=True)
 
     mobile.goto("http://127.0.0.1:8050/use-case", wait_until="networkidle", timeout=60_000)
