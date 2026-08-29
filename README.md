@@ -11,13 +11,13 @@ The proposed system turns a propositional-logic knowledge base into several comp
 - a **logical explanation** that derives a claim from its premises using natural deduction;
 - a **natural-language explanation** of the proof.
 
-[View the project introduction](https://guchengwei.github.io/ndsa-debate-vis/) · [Read the thesis](https://dspace.jaist.ac.jp/dspace/bitstream/10119/17162/11/paper.pdf)
+[Try the live visualization](https://ndsa-debate-vis.vercel.app/) · [View the project introduction](https://guchengwei.github.io/ndsa-debate-vis/) · [Read the thesis](https://dspace.jaist.ac.jp/dspace/bitstream/10119/17162/11/paper.pdf)
 
 ## Prototype status
 
-This repository contains research-prototype code, not a verified production application. The historical deployment is no longer available. The pinned Python runtime is exercised in CI, but the legacy deployment configuration has not been independently validated. Expect defects, outdated assumptions, and environment-specific paths.
+This repository contains research-prototype code, not a production application. The Python 3.12 runtime is exercised in CI, including a real Chromium render, and the current demo is deployed on Vercel. Expect research-code limitations and defects outside the tested paths.
 
-The landing page under [`docs/`](docs/) is a static introduction to the research. It does not run or validate the Python application.
+The landing page under [`docs/`](docs/) is a static introduction to the research. The live visualization runs separately on Vercel so the explanatory landing page and Python application remain independently deployable.
 
 ## Research use case
 
@@ -35,7 +35,8 @@ The redesign deliberately reuses the existing Python/Plotly/igraph stack instead
 
 ```text
 .
-├── app.py                  Dash interface, deterministic graph layout, and callbacks
+├── app.py                  Vercel WSGI compatibility wrapper and local launcher
+├── dashboard.py            Dash interface, deterministic graph layout, and callbacks
 ├── argument_engine/
 │   ├── argument.py         Argument construction, attacks, and extensions
 │   ├── natural_deduction.py
@@ -50,7 +51,7 @@ The redesign deliberately reuses the existing Python/Plotly/igraph stack instead
 
 ## Technology
 
-- Python 3.10
+- Python 3.12
 - Dash and Flask
 - Plotly
 - igraph
@@ -60,10 +61,8 @@ Pinned package versions are listed in [`requirements.txt`](requirements.txt).
 
 ## Local exploration
 
-The following is the repository’s intended local setup, not a verified installation recipe:
-
 ```bash
-python3.10 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 python app.py
@@ -71,15 +70,14 @@ python app.py
 
 Before relying on the output, test the reasoning engine against known cases. Cached-data paths are resolved relative to the repository rather than a developer-specific home directory.
 
-## GitHub Pages
+## Deployment
 
-The landing page is exported to [`docs/`](docs/). To host it through GitHub Pages:
+The repository has two public surfaces:
 
-1. Open the repository’s **Settings → Pages**.
-2. Choose **Deploy from a branch**.
-3. Select the default branch and the `/docs` folder.
+- **GitHub Pages** (`docs/`) — the static project introduction.
+- **Vercel** — the live Python/Dash visualization at <https://ndsa-debate-vis.vercel.app/>.
 
-The static page is independent of the Python runtime.
+Vercel uses the Flask-compatible `app` callable exported by root `app.py`; the full Dash application remains in `dashboard.py`.
 
 ## License
 
