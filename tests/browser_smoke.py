@@ -105,11 +105,18 @@ with sync_playwright() as playwright:
     mobile.goto("http://127.0.0.1:8050", wait_until="networkidle", timeout=60_000)
     mobile.wait_for_selector("#main-graph .js-plotly-plot", timeout=30_000)
     mobile.wait_for_selector("#dialogical .js-plotly-plot", timeout=30_000)
+    mobile.wait_for_function(
+        "['main-graph', 'dialogical'].every(id => document.getElementById(id)?.scrollLeft > 0)",
+        timeout=30_000,
+    )
     assert_no_page_overflow(mobile, "mobile visualization")
     for graph_id in ["main-graph", "dialogical"]:
-        width = mobile.locator(f"#{graph_id}").bounding_box()["width"]
-        if width < 850:
-            raise AssertionError(f"Expected readable mobile canvas for {graph_id}, got {width}px")
+        plot_width = mobile.locator(f"#{graph_id} .js-plotly-plot").bounding_box()["width"]
+        if plot_width < 850:
+            raise AssertionError(f"Expected readable mobile canvas for {graph_id}, got {plot_width}px")
+        scroll_left = mobile.locator(f"#{graph_id}").evaluate("element => element.scrollLeft")
+        if scroll_left <= 0:
+            raise AssertionError(f"Expected {graph_id} to start centered on mobile")
     mobile.screenshot(path=str(ARTIFACT_DIR / "mobile-home.png"), full_page=True)
 
     mobile.goto("http://127.0.0.1:8050/use-case", wait_until="networkidle", timeout=60_000)
