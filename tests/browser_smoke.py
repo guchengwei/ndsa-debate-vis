@@ -46,3 +46,5 @@ with sync_playwright() as playwright:
 
     if page_errors:
         raise AssertionError("Browser page errors: " + " | ".join(page_errors))
+    if console_errors:
+        raise AssertionError("Browser console errors: " + " | ".join(console_errors))
