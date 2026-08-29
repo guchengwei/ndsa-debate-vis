@@ -82,17 +82,23 @@ with sync_playwright() as playwright:
     if "A1" not in page.locator("#argument-detail").inner_text():
         raise AssertionError("Expected clicking the second argument to select A1")
 
-    selected_claim = page.locator("#candidate-dropdown .Select-value-label").inner_text()
-    page.locator("#candidate-dropdown .Select-control").click()
-    options = page.locator("#candidate-dropdown .Select-option")
-    if options.count() < 2:
-        raise AssertionError("Expected multiple focus-claim options")
-    options.nth(1).click()
+    dropdown = page.locator("#candidate-dropdown")
+    selected_claim = dropdown.inner_text().strip()
+    dropdown_input = dropdown.locator("input")
+    if dropdown_input.count() == 0:
+        raise AssertionError("Expected the focus-claim dropdown to expose a keyboard input")
+    dropdown_input.click()
+    dropdown_input.press("ArrowDown")
+    dropdown_input.press("ArrowDown")
+    dropdown_input.press("Enter")
     page.wait_for_function(
-        "previous => document.querySelector('#candidate-dropdown .Select-value-label')?.innerText !== previous",
+        "previous => document.getElementById('candidate-dropdown')?.innerText.trim() !== previous",
         arg=selected_claim,
         timeout=30_000,
     )
+    updated_claim = dropdown.inner_text().strip()
+    if not updated_claim or updated_claim == selected_claim:
+        raise AssertionError("Expected keyboard selection to change the focus claim")
     page.wait_for_function(
         "document.querySelector('#argument-detail')?.innerText.includes('A0')",
         timeout=30_000,
